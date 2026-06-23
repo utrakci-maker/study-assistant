@@ -57,7 +57,7 @@ const LIMITS = {
 // MAIN FUNCTION: Check if a student can upload
 // ─────────────────────────────────────────────────────────────
 
-export async function checkTierLimits(userPhone: string): Promise<TierCheckResult> {
+export async function checkTierLimits(userPhone: string, userEmail?: string): Promise<TierCheckResult> {
   // Step 1: Look up this phone number in the database
   const { data: usage, error } = await supabase
     .from('usage_tracking')
@@ -67,7 +67,7 @@ export async function checkTierLimits(userPhone: string): Promise<TierCheckResul
 
   // Step 2: If they've never uploaded before, create a record for them
   if (error || !usage) {
-    const newRecord = await createUsageRecord(userPhone)
+    const newRecord = await createUsageRecord(userPhone, userEmail)
     if (!newRecord) {
       return {
         canUpload: false,
@@ -194,21 +194,37 @@ export async function resetDailyLimitIfNeeded(usage: UsageRecord): Promise<Usage
 // HELPER: Create a new usage record for a first-time user
 // ─────────────────────────────────────────────────────────────
 
-async function createUsageRecord(userPhone: string): Promise<UsageRecord | null> {
+async function createUsageRecord(userPhone: string, userEmail?: string): Promise<UsageRecord | null> {
   const today = new Date().toISOString().split('T')[0]
 
-  const { data, error } = await supabase
+  // Try inserting with email first; if the email already belongs to another
+  // phone's record (UNIQUE conflict), retry without the email.
+  const insertPayload = {
+    user_phone: userPhone,
+    user_email: userEmail ?? null,
+    tier: 'free',
+    uploads_today: 0,
+    uploads_this_month: 0,
+    last_reset_date: today,
+    monthly_reset_date: today,
+  }
+
+  let { data, error } = await supabase
     .from('usage_tracking')
-    .insert({
-      user_phone: userPhone,
-      tier: 'free',
-      uploads_today: 0,
-      uploads_this_month: 0,
-      last_reset_date: today,
-      monthly_reset_date: today,
-    })
+    .insert(insertPayload)
     .select()
     .single()
+
+  if (error && userEmail) {
+    // Email already exists on another row — create record without it
+    const { data: d2, error: e2 } = await supabase
+      .from('usage_tracking')
+      .insert({ ...insertPayload, user_email: null })
+      .select()
+      .single()
+    data = d2
+    error = e2
+  }
 
   if (error) {
     console.error('Error creating usage record:', error)
@@ -216,4 +232,69 @@ async function createUsageRecord(userPhone: string): Promise<UsageRecord | null>
   }
 
   return data
+}
+
+// ─────────────────────────────────────────────────────────────
+// EMAIL LIMITS: Check upload limit by email address
+// ─────────────────────────────────────────────────────────────
+
+export async function checkEmailTierLimits(userEmail: string): Promise<TierCheckResult> {
+  const { data: usage } = await supabase
+    .from('usage_tracking')
+    .select('*')
+    .eq('user_email', userEmail)
+    .single()
+
+  if (!usage) {
+    // This email hasn't been linked to any record yet — no limit hit
+    return { canUpload: true, reason: 'New email', tier: 'free', uploadsToday: 0, uploadsThisMonth: 0 }
+  }
+
+  const resetUsage = await resetDailyLimitIfNeeded(usage)
+  const tier = resetUsage.tier
+  const limits = LIMITS[tier as keyof typeof LIMITS] || LIMITS.free
+
+  if (resetUsage.uploads_today >= limits.daily) {
+    return {
+      canUpload: false,
+      reason: `Daily limit reached for this email (${limits.daily}/day on free plan). Unlock for $0.99 or upgrade to Pro.`,
+      tier,
+      uploadsToday: resetUsage.uploads_today,
+      uploadsThisMonth: resetUsage.uploads_this_month,
+    }
+  }
+
+  if (resetUsage.uploads_this_month >= limits.monthly) {
+    return {
+      canUpload: false,
+      reason: `Monthly limit reached for this email. Upgrade to Pro for 60/month.`,
+      tier,
+      uploadsToday: resetUsage.uploads_today,
+      uploadsThisMonth: resetUsage.uploads_this_month,
+    }
+  }
+
+  return { canUpload: true, reason: 'OK', tier, uploadsToday: resetUsage.uploads_today, uploadsThisMonth: resetUsage.uploads_this_month }
+}
+
+// ─────────────────────────────────────────────────────────────
+// EMAIL LIMITS: Increment count on the record that owns this email
+// ─────────────────────────────────────────────────────────────
+
+export async function incrementEmailUploadCount(userEmail: string): Promise<void> {
+  const { data: usage } = await supabase
+    .from('usage_tracking')
+    .select('uploads_today, uploads_this_month')
+    .eq('user_email', userEmail)
+    .single()
+
+  if (!usage) return
+
+  await supabase
+    .from('usage_tracking')
+    .update({
+      uploads_today: (usage.uploads_today || 0) + 1,
+      uploads_this_month: (usage.uploads_this_month || 0) + 1,
+    })
+    .eq('user_email', userEmail)
 }

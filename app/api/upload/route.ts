@@ -20,9 +20,10 @@ export const maxDuration = 60
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabaseAdmin } from '@/lib/supabase'
-import { checkTierLimits, incrementUploadCount } from '@/lib/tiers'
+import { checkTierLimits, checkEmailTierLimits, incrementUploadCount, incrementEmailUploadCount } from '@/lib/tiers'
 import { generateFingerprint, checkCache, saveToCache } from '@/lib/cacheUtils'
 import { STUDY_PROMPT } from '@/lib/prompts'
+import { validateEmail, normalizeEmail } from '@/lib/emailUtils'
 
 // Claude only accepts these image formats
 type ClaudeMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
@@ -39,10 +40,18 @@ export async function POST(request: NextRequest) {
   }
 
   const phone = (formData.get('phone') as string | null)?.trim()
+  const emailRaw = (formData.get('email') as string | null)?.trim()
   const imageFile = formData.get('image') as File | null
 
   if (!phone) {
     return NextResponse.json({ message: 'Phone number is required.' }, { status: 400 })
+  }
+  if (!emailRaw) {
+    return NextResponse.json({ message: 'Email address is required.' }, { status: 400 })
+  }
+  const emailValidationError = validateEmail(emailRaw)
+  if (emailValidationError) {
+    return NextResponse.json({ message: emailValidationError }, { status: 400 })
   }
   if (!imageFile || imageFile.size === 0) {
     return NextResponse.json({ message: 'Image is required.' }, { status: 400 })
@@ -61,17 +70,38 @@ export async function POST(request: NextRequest) {
     }, { status: 400 })
   }
 
-  // ── STEP 2: Check tier limits before doing any expensive work ──
-  const tierCheck = await checkTierLimits(normalizedPhone)
-  if (!tierCheck.canUpload) {
+  const normalizedEmail = normalizeEmail(emailRaw)
+
+  // ── STEP 2: Check tier limits for BOTH phone and email ────────
+  // This prevents abuse: changing your phone number won't help if
+  // your email is already at the limit (and vice versa).
+  const [phoneCheck, emailCheck] = await Promise.all([
+    checkTierLimits(normalizedPhone, normalizedEmail),  // also stores email on new records
+    checkEmailTierLimits(normalizedEmail),              // checks by user_email column
+  ])
+
+  if (!phoneCheck.canUpload) {
     return NextResponse.json({
       status: 'limit_reached',
-      message: tierCheck.reason,
-      tier: tierCheck.tier,
-      uploadsToday: tierCheck.uploadsToday,
-      uploadsThisMonth: tierCheck.uploadsThisMonth,
+      message: phoneCheck.reason,
+      tier: phoneCheck.tier,
+      uploadsToday: phoneCheck.uploadsToday,
+      uploadsThisMonth: phoneCheck.uploadsThisMonth,
     }, { status: 429 })
   }
+
+  if (!emailCheck.canUpload) {
+    return NextResponse.json({
+      status: 'limit_reached',
+      message: `Email limit reached: ${emailCheck.reason}`,
+      tier: emailCheck.tier,
+      uploadsToday: emailCheck.uploadsToday,
+      uploadsThisMonth: emailCheck.uploadsThisMonth,
+    }, { status: 429 })
+  }
+
+  // Use the more restrictive of the two tier levels
+  const tierCheck = phoneCheck
 
   // ── STEP 3: Convert image to base64 for Claude ─────────────────
   // Claude reads the image directly from base64 — no public URL needed
@@ -93,6 +123,7 @@ export async function POST(request: NextRequest) {
     .from('submissions')
     .insert({
       user_phone: normalizedPhone,
+      user_email: normalizedEmail,
       image_url: 'base64-upload', // Storage bucket is optional — set up Day 5+
       status: 'pending',
     })
@@ -217,8 +248,11 @@ export async function POST(request: NextRequest) {
     cost_usd: wasCached ? 0 : costUsd,
   }).eq('id', submissionId)
 
-  // ── STEP 8: Increment their upload count ───────────────────────
-  await incrementUploadCount(normalizedPhone)
+  // ── STEP 8: Increment upload count for both phone and email ───
+  await Promise.all([
+    incrementUploadCount(normalizedPhone),
+    incrementEmailUploadCount(normalizedEmail),
+  ])
 
   // ── STEP 9: Return the submission ID to the browser ───────────
   // The upload page will redirect to /results/[submissionId]

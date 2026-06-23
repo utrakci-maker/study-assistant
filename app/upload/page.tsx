@@ -11,10 +11,13 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { validateEmail } from '@/lib/emailUtils'
 
 export default function UploadPage() {
   const [phone, setPhone] = useState('')
   const [phoneError, setPhoneError] = useState('')
+  const [email, setEmail] = useState('')
+  const [emailError, setEmailError] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -46,6 +49,9 @@ export default function UploadPage() {
     if (!phone.trim()) { setError('Please enter your phone number.'); return }
     const pErr = validatePhone(phone)
     if (pErr) { setPhoneError(pErr); return }
+    if (!email.trim()) { setError('Please enter your email address.'); return }
+    const eErr = validateEmail(email)
+    if (eErr) { setEmailError(eErr); return }
     if (!imageFile) { setError('Please select or take a photo.'); return }
 
     setLoading(true)
@@ -54,6 +60,7 @@ export default function UploadPage() {
     try {
       const formData = new FormData()
       formData.append('phone', phone.trim())
+      formData.append('email', email.trim())
       formData.append('image', imageFile)
 
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
@@ -120,6 +127,33 @@ export default function UploadPage() {
               )}
             </div>
 
+            {/* Email input */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Email Address <span className="text-gray-400 font-normal">/ البريد الإلكتروني</span>
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => {
+                  setEmail(e.target.value)
+                  setEmailError(validateEmail(e.target.value))
+                }}
+                placeholder="you@gmail.com"
+                disabled={loading}
+                className={`w-full border rounded-xl px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:bg-gray-50 ${
+                  emailError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-blue-500'
+                }`}
+              />
+              {emailError ? (
+                <p className="text-xs text-red-500 mt-1">⚠️ {emailError}</p>
+              ) : (
+                <p className="text-xs text-gray-400 mt-1">
+                  Checked against your phone — prevents limit bypassing
+                </p>
+              )}
+            </div>
+
             {/* Image upload area */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -181,7 +215,7 @@ export default function UploadPage() {
             {/* Submit button */}
             <button
               type="submit"
-              disabled={loading || !phone.trim() || !!phoneError || !imageFile}
+              disabled={loading || !phone.trim() || !!phoneError || !email.trim() || !!emailError || !imageFile}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-4 font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? (
