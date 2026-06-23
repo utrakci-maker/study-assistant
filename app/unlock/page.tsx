@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 
-export default function UnlockPage() {
+function UnlockContent() {
   const searchParams = useSearchParams()
   const cancelled = searchParams.get('cancelled')
 
@@ -184,5 +184,13 @@ export default function UnlockPage() {
         </div>
       </div>
     </main>
+  )
+}
+
+export default function UnlockPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <UnlockContent />
+    </Suspense>
   )
 }
