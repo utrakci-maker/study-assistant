@@ -15,7 +15,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from 'anthropic'
+import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '@/lib/supabase'
 import { checkTierLimits, incrementUploadCount } from '@/lib/tiers'
 import { generateFingerprint, checkCache, saveToCache } from '@/lib/cacheUtils'

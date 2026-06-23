@@ -1,5 +1,5 @@
 {
-  "name": "sa-scaffold",
+  "name": "study-assistant",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,8 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.105.0",
     "@supabase/supabase-js": "^2.108.2",
-    "anthropic": "^0.0.0",
     "next": "14.2.35",
     "react": "^18",
     "react-dom": "^18",
