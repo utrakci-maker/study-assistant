@@ -69,7 +69,7 @@ export async function generateFingerprint(
 export async function checkCache(fingerprint: string): Promise<CachedContent | null> {
   const { data, error } = await supabase
     .from('content_cache')
-    .select('topic_title, study_plan, summary, explanation, quiz, detected_language')
+    .select('topic_title, study_plan, summary, explanation, quiz, detected_language, hit_count')
     .eq('content_fingerprint', fingerprint)
     .single()
 
@@ -80,7 +80,7 @@ export async function checkCache(fingerprint: string): Promise<CachedContent | n
   // Increment the hit counter so we can track savings
   await supabase
     .from('content_cache')
-    .update({ hit_count: (data as any).hit_count + 1 })
+    .update({ hit_count: (data.hit_count ?? 1) + 1 })
     .eq('content_fingerprint', fingerprint)
 
   return data as CachedContent
