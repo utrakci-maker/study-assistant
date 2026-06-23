@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "PowerShell(choco install *)",
-      "PowerShell(winget install *)"
+      "PowerShell(winget install *)",
+      "PowerShell(New-Item *)",
+      "PowerShell(git add *)"
     ]
   }
 }
