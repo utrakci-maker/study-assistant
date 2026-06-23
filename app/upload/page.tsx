@@ -239,13 +239,12 @@ export default function UploadPage() {
           </form>
         </div>
 
-        {/* Pricing link */}
-        <p className="text-center mt-4 text-sm text-gray-500">
-          Need more?{' '}
-          <a href="/pricing" className="text-blue-600 hover:underline">
-            See plans
-          </a>
-        </p>
+        {/* Footer links */}
+        <div className="flex justify-center gap-4 mt-4 text-sm text-gray-500">
+          <a href="/history" className="hover:text-blue-600 hover:underline">My History</a>
+          <span>·</span>
+          <a href="/pricing" className="hover:text-blue-600 hover:underline">Pricing</a>
+        </div>
 
       </div>
     </main>

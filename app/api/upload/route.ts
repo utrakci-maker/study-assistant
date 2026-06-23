@@ -117,14 +117,35 @@ export async function POST(request: NextRequest) {
     mediaType = 'image/jpeg'
   }
 
+  // ── STEP 3b: Upload image to Supabase Storage ─────────────────
+  // Save a copy of the image so students and admins can refer back to it.
+  // Wrapped in try/catch — if the 'study-images' bucket doesn't exist yet,
+  // we fall back to 'base64-upload' and still process normally.
+  let imageUrl = 'base64-upload'
+  try {
+    const ext = mediaType.split('/')[1] || 'jpg'
+    const fileName = `${normalizedPhone}/${Date.now()}.${ext}`
+    const { data: storageData } = await supabaseAdmin.storage
+      .from('study-images')
+      .upload(fileName, imageBuffer, { contentType: mediaType, upsert: false })
+
+    if (storageData) {
+      const { data: urlData } = supabaseAdmin.storage
+        .from('study-images')
+        .getPublicUrl(fileName)
+      imageUrl = urlData.publicUrl
+    }
+  } catch {
+    // Bucket not set up yet — continue without storing the image
+  }
+
   // ── STEP 4: Create the submission record in the database ───────
-  // We create it now with status 'pending' so we have an ID to track
   const { data: submission, error: submissionError } = await supabaseAdmin
     .from('submissions')
     .insert({
       user_phone: normalizedPhone,
       user_email: normalizedEmail,
-      image_url: 'base64-upload', // Storage bucket is optional — set up Day 5+
+      image_url: imageUrl,
       status: 'pending',
     })
     .select('id')
