@@ -4,7 +4,10 @@
       "PowerShell(choco install *)",
       "PowerShell(winget install *)",
       "PowerShell(New-Item *)",
-      "PowerShell(git add *)"
+      "PowerShell(git add *)",
+      "PowerShell(git *)",
+      "PowerShell(npm uninstall *)",
+      "PowerShell(git rm *)"
     ]
   }
 }
