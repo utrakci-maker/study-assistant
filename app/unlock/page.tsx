@@ -63,7 +63,7 @@ export default function UnlockPage() {
     }
   }
 
-  const whatsappNumber = '+9647700000000' // TODO: replace with your real WhatsApp number
+  const whatsappNumber = '+9647754822210'
   const whatsappMsg = encodeURIComponent(
     `Hello! I want to purchase more uploads for the study assistant. My phone: ${phone || '(enter above)'}`
   )
