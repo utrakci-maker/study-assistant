@@ -14,10 +14,20 @@ import { useRouter } from 'next/navigation'
 
 export default function UploadPage() {
   const [phone, setPhone] = useState('')
+  const [phoneError, setPhoneError] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const validatePhone = (value: string) => {
+    const normalized = value.replace(/[\s\-\(\)\.]/g, '')
+    if (!normalized) return ''
+    if (!/^\+?[0-9]{7,15}$/.test(normalized)) {
+      return 'Invalid number — use digits only, 7 to 15 digits (e.g. 07501234567)'
+    }
+    return ''
+  }
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
@@ -34,6 +44,8 @@ export default function UploadPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!phone.trim()) { setError('Please enter your phone number.'); return }
+    const pErr = validatePhone(phone)
+    if (pErr) { setPhoneError(pErr); return }
     if (!imageFile) { setError('Please select or take a photo.'); return }
 
     setLoading(true)
@@ -90,12 +102,22 @@ export default function UploadPage() {
               <input
                 type="tel"
                 value={phone}
-                onChange={e => setPhone(e.target.value)}
+                onChange={e => {
+                  setPhone(e.target.value)
+                  setPhoneError(validatePhone(e.target.value))
+                }}
                 placeholder="+964 750 XXX XXXX"
                 disabled={loading}
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50"
+                className={`w-full border rounded-xl px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:bg-gray-50 ${
+                  phoneError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-blue-500'
+                }`}
               />
-              <p className="text-xs text-gray-400 mt-1">Used to track your free uploads — no account needed</p>
+              {phoneError && (
+                <p className="text-xs text-red-500 mt-1">⚠️ {phoneError}</p>
+              )}
+              {!phoneError && (
+                <p className="text-xs text-gray-400 mt-1">Used to track your free uploads — no account needed</p>
+              )}
             </div>
 
             {/* Image upload area */}
@@ -159,7 +181,7 @@ export default function UploadPage() {
             {/* Submit button */}
             <button
               type="submit"
-              disabled={loading || !phone.trim() || !imageFile}
+              disabled={loading || !phone.trim() || !!phoneError || !imageFile}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-4 font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? (

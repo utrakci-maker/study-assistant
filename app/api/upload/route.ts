@@ -51,8 +51,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Image is too large. Please use a photo under 5MB.' }, { status: 400 })
   }
 
-  // Normalize phone: strip spaces, dashes, brackets
+  // Normalize phone: strip spaces, dashes, brackets, dots
   const normalizedPhone = phone.replace(/[\s\-\(\)\.]/g, '')
+
+  // Validate: must be + followed by 7–15 digits, or just 7–15 digits
+  if (!/^\+?[0-9]{7,15}$/.test(normalizedPhone)) {
+    return NextResponse.json({
+      message: 'Please enter a valid phone number (7–15 digits, e.g. 07501234567 or +9647501234567).',
+    }, { status: 400 })
+  }
 
   // ── STEP 2: Check tier limits before doing any expensive work ──
   const tierCheck = await checkTierLimits(normalizedPhone)
