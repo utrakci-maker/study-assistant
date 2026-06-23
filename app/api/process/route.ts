@@ -18,7 +18,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { supabase } from '@/lib/supabase'
 import { checkTierLimits, incrementUploadCount } from '@/lib/tiers'
-import { generateFingerprint, checkCache, saveToCache } from '@/lib/cacheUtils'
+import { generateFingerprint, checkCache, saveToCache, type QuizItem } from '@/lib/cacheUtils'
 import { STUDY_PROMPT } from '@/lib/prompts'
 
 // ─────────────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     study_plan: string[]
     summary: string
     explanation: string
-    quiz: object[]
+    quiz: QuizItem[]
   }
 
   let inputTokens = 0
