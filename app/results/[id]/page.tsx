@@ -1,21 +1,20 @@
 /**
  * app/results/[id]/page.tsx — Results Page (route: /results/[id])
  *
- * WHY THIS IS A SERVER COMPONENT (no 'use client'):
- * This page fetches data from the database and displays it.
- * In Next.js, pages without 'use client' run on the server — they load
- * the data before sending anything to the browser, which is faster and
- * better for SEO. The student sees the full page immediately.
- *
- * The interactive quiz will be added in Day 3.
+ * Server component: fetches the submission and the student's usage stats
+ * from the database, then renders everything. Interactive parts (quiz,
+ * copy button) are separate client components imported below.
  */
 
 import { supabaseAdmin } from '@/lib/supabase'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import QuizSection from '@/app/components/QuizSection'
+import CopyButton from '@/app/components/CopyButton'
 
 interface Submission {
   id: string
+  user_phone: string
   topic_title: string
   detected_language: string
   study_plan: string[]
@@ -27,25 +26,48 @@ interface Submission {
   created_at: string
 }
 
+interface UsageStats {
+  uploads_today: number
+  uploads_this_month: number
+  tier: string
+}
+
+const DAILY_LIMITS: Record<string, number> = {
+  free: 2,
+  single_unlock: 999,
+  pro_monthly: 999,
+}
+
 export default async function ResultsPage({ params }: { params: { id: string } }) {
 
-  // Fetch the submission from the database
+  // Fetch submission and usage stats in parallel (faster than one-by-one)
   const { data: submission, error } = await supabaseAdmin
     .from('submissions')
     .select('*')
     .eq('id', params.id)
     .single()
 
-  // If not found or failed, show 404
   if (error || !submission) return notFound()
+
+  // Fetch usage stats using the phone from the submission
+  const { data: usage } = await supabaseAdmin
+    .from('usage_tracking')
+    .select('uploads_today, uploads_this_month, tier')
+    .eq('user_phone', submission.user_phone)
+    .single()
+
+  // ── Error states ───────────────────────────────────────────────
+
   if (submission.status === 'failed') {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-md text-center">
+        <div className="max-w-md text-center bg-white rounded-2xl shadow-sm p-8">
           <div className="text-5xl mb-4">⚠️</div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Processing Failed</h1>
-          <p className="text-gray-500 mb-6">The AI could not read your image clearly. Please try again with a better-lit, clearer photo.</p>
-          <Link href="/upload" className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 inline-block">
+          <p className="text-gray-500 mb-6">
+            The AI could not read the image clearly. Please try again with a well-lit, clear photo.
+          </p>
+          <Link href="/upload" className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 inline-block font-medium">
             Try Again
           </Link>
         </div>
@@ -56,42 +78,109 @@ export default async function ResultsPage({ params }: { params: { id: string } }
   if (submission.status === 'pending') {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-md text-center">
+        <div className="max-w-md text-center bg-white rounded-2xl shadow-sm p-8">
           <div className="text-5xl mb-4 animate-pulse">⏳</div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Still Processing…</h1>
-          <p className="text-gray-500">Please wait a moment and refresh the page.</p>
+          <p className="text-gray-500">Refresh the page in a few seconds.</p>
         </div>
       </main>
     )
   }
 
+  // ── Main results ───────────────────────────────────────────────
+
   const s = submission as Submission
   const isRTL = s.detected_language === 'ar' || s.detected_language === 'ku'
+  const stats = usage as UsageStats | null
+
+  // Calculate remaining uploads for today
+  const dailyLimit = DAILY_LIMITS[stats?.tier ?? 'free'] ?? 2
+  const usedToday = stats?.uploads_today ?? 0
+  const remainingToday = Math.max(0, dailyLimit - usedToday)
+  const isAtLimit = remainingToday === 0
+  const isFree = (stats?.tier ?? 'free') === 'free'
+
+  const langLabel =
+    s.detected_language === 'ar' ? 'Arabic / عربي'
+    : s.detected_language === 'ku' ? 'Kurdish / كوردی'
+    : 'English'
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-blue-50 to-white" dir={isRTL ? 'rtl' : 'ltr'}>
-      <div className="max-w-2xl mx-auto px-4 py-10 space-y-6">
+      <div className="max-w-2xl mx-auto px-4 py-8 space-y-5">
 
-        {/* Back link */}
-        <Link href="/upload" className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1">
-          ← {isRTL ? 'رفع صورة جديدة' : 'Upload another'}
-        </Link>
+        {/* Nav row */}
+        <div className="flex items-center justify-between">
+          <Link href="/upload" className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+            ← {isRTL ? 'رفع صورة جديدة' : 'Upload another'}
+          </Link>
+          <CopyButton
+            topicTitle={s.topic_title}
+            summary={s.summary}
+            studyPlan={s.study_plan}
+            isRTL={isRTL}
+          />
+        </div>
 
-        {/* Topic title */}
+        {/* ── Uploads remaining banner ── */}
+        {isFree && isAtLimit && (
+          <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-start gap-3">
+            <span className="text-2xl">🔒</span>
+            <div className="flex-1">
+              <p className="font-semibold text-amber-900 text-sm">
+                {isRTL ? 'وصلت إلى الحد اليومي المجاني' : "You've reached today's free limit"}
+              </p>
+              <p className="text-amber-700 text-xs mt-0.5">
+                {isRTL
+                  ? 'ادفع 0.99$ لفتح رفع إضافي أو اشترك بـ Pro'
+                  : 'Pay $0.99 for one more upload, or upgrade to Pro for unlimited.'}
+              </p>
+              <div className="flex gap-2 mt-3">
+                <Link href="/unlock" className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors">
+                  {isRTL ? 'فتح مقابل 0.99$' : 'Unlock — $0.99'}
+                </Link>
+                <Link href="/pricing" className="border border-amber-400 text-amber-800 text-xs font-semibold px-4 py-2 rounded-lg hover:bg-amber-100 transition-colors">
+                  {isRTL ? 'ترقية إلى Pro' : 'Upgrade to Pro'}
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isFree && !isAtLimit && (
+          <div className="bg-white border border-gray-100 rounded-2xl px-5 py-3 flex items-center justify-between shadow-sm">
+            <span className="text-sm text-gray-500">
+              {isRTL ? 'الرفعات المتبقية اليوم' : 'Free uploads left today'}
+            </span>
+            <div className="flex items-center gap-2">
+              {Array.from({ length: dailyLimit }).map((_, i) => (
+                <span
+                  key={i}
+                  className={`w-3 h-3 rounded-full ${i < remainingToday ? 'bg-green-400' : 'bg-gray-200'}`}
+                />
+              ))}
+              <span className="text-sm font-semibold text-gray-700 ml-1">{remainingToday}/{dailyLimit}</span>
+            </div>
+          </div>
+        )}
+
+        {/* ── Topic card ── */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-4">
             <span className="text-3xl">📖</span>
-            <div>
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Topic / الموضوع</p>
-              <h1 className="text-xl font-bold text-gray-900">{s.topic_title}</h1>
-              <span className="inline-block mt-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                {s.detected_language === 'ar' ? 'Arabic / عربي' : s.detected_language === 'ku' ? 'Kurdish / كوردی' : 'English'}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">
+                {isRTL ? 'الموضوع' : 'Topic'}
+              </p>
+              <h1 className="text-xl font-bold text-gray-900 leading-snug">{s.topic_title}</h1>
+              <span className="inline-block mt-2 text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-medium">
+                {langLabel}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Summary */}
+        {/* ── Summary ── */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
             <span>📝</span> {isRTL ? 'الملخص' : 'Summary'}
@@ -99,24 +188,24 @@ export default async function ResultsPage({ params }: { params: { id: string } }
           <p className="text-gray-700 leading-relaxed">{s.summary}</p>
         </div>
 
-        {/* Study Plan */}
+        {/* ── Study Plan ── */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
             <span>🗺️</span> {isRTL ? 'خطة الدراسة' : 'Study Plan'}
           </h2>
           <ol className="space-y-3">
-            {(s.study_plan || []).map((step: string, i: number) => (
+            {(s.study_plan || []).map((step, i) => (
               <li key={i} className="flex items-start gap-3">
                 <span className="flex-shrink-0 w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
                   {i + 1}
                 </span>
-                <span className="text-gray-700 pt-0.5">{step}</span>
+                <span className="text-gray-700 pt-0.5 leading-snug">{step}</span>
               </li>
             ))}
           </ol>
         </div>
 
-        {/* Explanation */}
+        {/* ── Explanation ── */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <h2 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
             <span>💡</span> {isRTL ? 'الشرح التفصيلي' : 'Full Explanation'}
@@ -124,43 +213,19 @@ export default async function ResultsPage({ params }: { params: { id: string } }
           <p className="text-gray-700 leading-relaxed whitespace-pre-line">{s.explanation}</p>
         </div>
 
-        {/* Quiz preview — full interactive version Day 3 */}
-        <div className="bg-amber-50 rounded-2xl border border-amber-200 p-6">
-          <h2 className="text-base font-semibold text-amber-900 mb-3 flex items-center gap-2">
-            <span>🧠</span> {isRTL ? 'الاختبار القصير' : 'Quiz'}{' '}
-            <span className="text-xs font-normal text-amber-600">(Interactive version — Day 3)</span>
+        {/* ── Interactive Quiz ── */}
+        <div>
+          <h2 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2 px-1">
+            <span>🧠</span> {isRTL ? 'اختبر نفسك' : 'Test Yourself'}
           </h2>
-          <div className="space-y-4">
-            {(s.quiz || []).map((q, i: number) => (
-              <div key={i} className="bg-white rounded-xl p-4 border border-amber-100">
-                <p className="font-medium text-gray-800 mb-2">
-                  {i + 1}. {q.question}
-                </p>
-                <ul className="space-y-1">
-                  {q.options.map((opt: string, j: number) => (
-                    <li key={j} className="text-sm text-gray-600 flex items-center gap-2">
-                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                        opt.startsWith(q.correct) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                      }`}>
-                        {['A','B','C','D'][j]}
-                      </span>
-                      {opt.replace(/^[A-D]\)\s*/, '')}
-                    </li>
-                  ))}
-                </ul>
-                <p className="text-xs text-green-700 mt-2 bg-green-50 rounded-lg p-2">
-                  ✓ {q.explanation}
-                </p>
-              </div>
-            ))}
-          </div>
+          <QuizSection quiz={s.quiz || []} isRTL={isRTL} />
         </div>
 
-        {/* Upload another */}
-        <div className="text-center pb-8">
+        {/* ── Bottom CTA ── */}
+        <div className="text-center pb-10 pt-4">
           <Link
             href="/upload"
-            className="bg-blue-600 text-white px-8 py-3 rounded-xl hover:bg-blue-700 inline-block font-medium"
+            className="bg-blue-600 text-white px-8 py-3 rounded-xl hover:bg-blue-700 inline-block font-medium shadow-sm"
           >
             {isRTL ? 'رفع مادة أخرى' : 'Upload Another Subject'}
           </Link>
