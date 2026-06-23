@@ -32,7 +32,7 @@ export interface CachedContent {
   detected_language: string
 }
 
-interface QuizItem {
+export interface QuizItem {
   question: string
   options: string[]
   correct: string
