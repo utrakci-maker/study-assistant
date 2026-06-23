@@ -17,7 +17,7 @@
  * and we never waste money on Claude API calls.
  */
 
-import { supabase } from './supabase'
+import { supabaseAdmin as supabase } from './supabase'
 
 // ─────────────────────────────────────────────────────────────
 // TYPES

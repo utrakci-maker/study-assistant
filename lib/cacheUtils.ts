@@ -17,7 +17,7 @@
  * This can save 70-90% of API costs once you have enough students.
  */
 
-import { supabase } from './supabase'
+import { supabaseAdmin as supabase } from './supabase'
 
 // ─────────────────────────────────────────────────────────────
 // TYPE for a cached result

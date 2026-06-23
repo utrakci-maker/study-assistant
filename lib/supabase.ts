@@ -1,22 +1,29 @@
 /**
  * lib/supabase.ts
  *
- * WHY THIS FILE EXISTS:
- * Your app needs to talk to Supabase (the cloud database) to save
- * student submissions, check usage limits, and cache AI results.
- * This file creates ONE shared connection so every other file
- * can use it without creating duplicate connections.
+ * TWO database clients live here:
  *
- * Think of this like the "phone line" to your database.
- * Every file that needs the database imports `supabase` from here.
+ * 1. `supabase` — uses the public anon key. Safe to use in the browser.
+ *    RLS policies control what it can access.
+ *
+ * 2. `supabaseAdmin` — uses the secret service role key. SERVER ONLY.
+ *    Bypasses RLS and has full database access. Never expose this to the browser.
+ *    All our API routes use this one.
  */
 
 import { createClient } from '@supabase/supabase-js'
 
-// Fall back to placeholder strings so the build succeeds even before
-// Supabase credentials are added. Real requests will fail gracefully
-// with a Supabase auth error rather than crashing the entire build.
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key'
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key'
 
+// Public client — limited access, safe for browser use
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// Admin client — full access, SERVER SIDE ONLY
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+  },
+})
