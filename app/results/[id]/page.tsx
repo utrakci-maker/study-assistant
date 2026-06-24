@@ -9,6 +9,9 @@ import Link from 'next/link'
 import QuizSection from '@/app/components/QuizSection'
 import CopyButton from '@/app/components/CopyButton'
 import PrintButton from '@/app/components/PrintButton'
+import WhatsAppShareButton from '@/app/components/WhatsAppShareButton'
+
+const SITE_URL = 'https://study-assistant-ashy.vercel.app'
 
 interface Submission {
   id: string
@@ -167,7 +170,8 @@ export default async function ResultsPage({ params }: { params: { id: string } }
               {isRTL ? 'لوحتي' : 'Dashboard'}
             </Link>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <WhatsAppShareButton topicTitle={s.topic_title} resultUrl={`${SITE_URL}/results/${s.id}`} isRTL={isRTL} />
             <CopyButton topicTitle={s.topic_title} summary={s.summary} studyPlan={s.study_plan} isRTL={isRTL} />
             <PrintButton isRTL={isRTL} />
           </div>

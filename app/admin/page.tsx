@@ -722,8 +722,38 @@ export default function AdminPage() {
 
                 {/* ── Activated Students ── */}
                 <div className="bg-gray-800 rounded-xl overflow-hidden">
-                  <div className="px-5 py-4 border-b border-gray-700">
+                  <div className="px-5 py-4 border-b border-gray-700 flex items-center justify-between">
                     <h2 className="font-semibold text-gray-200">✅ Activated Students ({students.length})</h2>
+                    {students.length > 0 && (
+                      <button
+                        onClick={() => {
+                          const rows = [
+                            ['Name', 'Phone', 'Email', 'Tier', 'Uploads This Month', 'Pro Expires', 'Notes', 'Joined'],
+                            ...students.map(s => [
+                              s.display_name,
+                              s.phone,
+                              s.email,
+                              s.tier,
+                              String(s.uploads_this_month),
+                              s.pro_expires_at ? new Date(s.pro_expires_at).toLocaleDateString('en-GB') : '',
+                              s.notes ?? '',
+                              new Date(s.created_at).toLocaleDateString('en-GB'),
+                            ]),
+                          ]
+                          const csv = rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n')
+                          const blob = new Blob([csv], { type: 'text/csv' })
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = `students-${new Date().toISOString().slice(0, 10)}.csv`
+                          a.click()
+                          URL.revokeObjectURL(url)
+                        }}
+                        className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-1.5 rounded-lg transition font-medium"
+                      >
+                        ⬇️ Export CSV
+                      </button>
+                    )}
                   </div>
                   {students.length === 0 ? (
                     <p className="text-gray-400 text-sm text-center py-8">No activated students yet.</p>

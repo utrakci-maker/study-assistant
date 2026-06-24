@@ -49,6 +49,8 @@ export default function DashboardPage() {
   const [googleUser, setGoogleUser] = useState<{ name: string; email: string; avatar: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'complete' | 'failed'>('all')
   const router = useRouter()
 
   useEffect(() => {
@@ -377,19 +379,65 @@ export default function DashboardPage() {
 
         {/* Submissions list */}
         <div>
-          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 px-1">
-            My Study Sessions ({data.submissions.length})
-          </h2>
+          <div className="flex items-center justify-between mb-3 px-1">
+            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+              My Study Sessions ({data.submissions.length})
+            </h2>
+          </div>
 
-          {data.submissions.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
-              <div className="text-5xl mb-3">📂</div>
-              <p className="text-gray-600 font-semibold text-sm">No uploads yet</p>
-              <p className="text-gray-400 text-xs mt-1">Upload your first study material to get started.</p>
+          {/* Search + filter */}
+          {data.submissions.length > 0 && (
+            <div className="flex flex-col sm:flex-row gap-2 mb-3">
+              <input
+                type="text"
+                placeholder="Search topics…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="flex-1 text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+              />
+              <div className="flex gap-1.5 flex-shrink-0">
+                {(['all', 'complete', 'failed'] as const).map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setStatusFilter(f)}
+                    className={`text-xs px-3 py-2 rounded-xl font-semibold transition ${
+                      statusFilter === f
+                        ? f === 'all' ? 'bg-gray-800 text-white' : f === 'complete' ? 'bg-green-600 text-white' : 'bg-red-500 text-white'
+                        : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    {f === 'all' ? 'All' : f === 'complete' ? '✓ Done' : '✗ Failed'}
+                  </button>
+                ))}
+              </div>
             </div>
-          ) : (
+          )}
+
+          {(() => {
+            const filteredSubs = data.submissions.filter(sub =>
+              (!search || sub.topic_title?.toLowerCase().includes(search.toLowerCase())) &&
+              (statusFilter === 'all' || sub.status === statusFilter)
+            )
+
+            if (data.submissions.length === 0) return (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
+                <div className="text-5xl mb-3">📂</div>
+                <p className="text-gray-600 font-semibold text-sm">No uploads yet</p>
+                <p className="text-gray-400 text-xs mt-1">Upload your first study material to get started.</p>
+              </div>
+            )
+
+            if (filteredSubs.length === 0) return (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+                <div className="text-3xl mb-2">🔍</div>
+                <p className="text-gray-500 text-sm">No sessions match your search.</p>
+                <button onClick={() => { setSearch(''); setStatusFilter('all') }} className="text-xs text-blue-600 hover:underline mt-2">Clear filters</button>
+              </div>
+            )
+
+            return (
             <div className="space-y-2">
-              {data.submissions.map(sub => (
+              {filteredSubs.map(sub => (
                 <Link
                   key={sub.id}
                   href={`/results/${sub.id}`}
@@ -429,7 +477,8 @@ export default function DashboardPage() {
                 </Link>
               ))}
             </div>
-          )}
+            )
+          })()}
         </div>
 
         {/* Footer */}

@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { supabaseBrowser } from '@/lib/supabaseBrowser'
 
 type Lang = 'en' | 'ar' | 'ku'
 
@@ -286,7 +287,14 @@ const T = {
 export default function LandingPage() {
   const [lang, setLang] = useState<Lang>('en')
   const [openFaq, setOpenFaq] = useState<number | null>(null)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
   const t = T[lang]
+
+  useEffect(() => {
+    supabaseBrowser.auth.getSession().then(({ data: { session } }) => {
+      setIsLoggedIn(!!session)
+    })
+  }, [])
 
   return (
     <div dir={t.dir} className="min-h-screen bg-white text-gray-900">
@@ -324,12 +332,29 @@ export default function LandingPage() {
                 </button>
               ))}
             </div>
-            <Link
-              href="/upload"
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition shadow-sm"
-            >
-              {t.nav_cta}
-            </Link>
+            {isLoggedIn ? (
+              <Link
+                href="/dashboard"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition shadow-sm"
+              >
+                {lang === 'ar' ? 'لوحتي ←' : lang === 'ku' ? 'داشبۆردەکەم ←' : 'My Dashboard →'}
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="text-sm text-gray-500 hover:text-gray-900 transition hidden sm:block font-medium"
+                >
+                  {lang === 'ar' ? 'تسجيل الدخول' : lang === 'ku' ? 'چوونەژوورەوە' : 'Sign In'}
+                </Link>
+                <Link
+                  href="/upload"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition shadow-sm"
+                >
+                  {t.nav_cta}
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -366,12 +391,21 @@ export default function LandingPage() {
 
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
-            <Link
-              href="/upload"
-              className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 py-4 rounded-xl text-lg transition shadow-lg shadow-blue-200 hover:shadow-blue-300 hover:-translate-y-0.5 active:translate-y-0"
-            >
-              {t.hero_cta}
-            </Link>
+            {isLoggedIn ? (
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 py-4 rounded-xl text-lg transition shadow-lg shadow-blue-200 hover:shadow-blue-300 hover:-translate-y-0.5 active:translate-y-0"
+              >
+                {lang === 'ar' ? '← الذهاب إلى لوحتي' : lang === 'ku' ? '← داشبۆردەکەم' : 'Go to My Dashboard →'}
+              </Link>
+            ) : (
+              <Link
+                href="/upload"
+                className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-8 py-4 rounded-xl text-lg transition shadow-lg shadow-blue-200 hover:shadow-blue-300 hover:-translate-y-0.5 active:translate-y-0"
+              >
+                {t.hero_cta}
+              </Link>
+            )}
             <a
               href="#how"
               className="inline-flex items-center justify-center gap-2 border-2 border-gray-200 hover:border-gray-300 text-gray-600 font-semibold px-8 py-4 rounded-xl text-lg transition hover:bg-gray-50"
@@ -379,6 +413,15 @@ export default function LandingPage() {
               {t.hero_secondary}
             </a>
           </div>
+
+          {!isLoggedIn && (
+            <p className="text-sm text-gray-400 mb-4">
+              Already a student?{' '}
+              <Link href="/login" className="text-blue-600 hover:underline font-medium">
+                {lang === 'ar' ? 'سجّل دخولك' : lang === 'ku' ? 'بچۆ ژوورەوە' : 'Sign in to your dashboard'}
+              </Link>
+            </p>
+          )}
 
           {/* Trust badges */}
           <div className="flex flex-wrap justify-center gap-4 text-sm text-gray-400">
@@ -609,8 +652,8 @@ export default function LandingPage() {
           <Link href="/upload" className="hover:text-gray-900 transition">
             {lang === 'en' ? 'Upload' : lang === 'ar' ? 'رفع' : 'بارکردن'}
           </Link>
-          <Link href="/history" className="hover:text-gray-900 transition">
-            {lang === 'en' ? 'History' : lang === 'ar' ? 'السجلّ' : 'مێژوو'}
+          <Link href={isLoggedIn ? '/dashboard' : '/login'} className="hover:text-gray-900 transition">
+            {lang === 'en' ? (isLoggedIn ? 'Dashboard' : 'Sign In') : lang === 'ar' ? (isLoggedIn ? 'لوحتي' : 'تسجيل الدخول') : (isLoggedIn ? 'داشبۆرد' : 'چوونەژوورەوە')}
           </Link>
           <Link href="/pricing" className="hover:text-gray-900 transition">
             {lang === 'en' ? 'Pricing' : lang === 'ar' ? 'الأسعار' : 'نرخەکان'}
