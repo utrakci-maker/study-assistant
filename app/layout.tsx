@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import InstallPrompt from "./components/InstallPrompt";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -12,6 +13,13 @@ const geistMono = localFont({
   variable: "--font-geist-mono",
   weight: "100 900",
 });
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: '#2563eb',
+}
 
 export const metadata: Metadata = {
   title: {
@@ -42,16 +50,10 @@ export const metadata: Metadata = {
     googleBot: { index: true, follow: true },
   },
   manifest: '/manifest.json',
-  themeColor: '#2563eb',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
     title: 'StudyAI',
-  },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
   },
 };
 
@@ -64,6 +66,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
+        <InstallPrompt />
       </body>
     </html>
   );
