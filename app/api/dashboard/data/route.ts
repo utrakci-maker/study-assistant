@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
   const { data: profile } = await supabaseAdmin
     .from('student_profiles')
-    .select('display_name, phone')
+    .select('display_name, phone, status')
     .eq('id', user.id)
     .single()
 
@@ -83,6 +83,7 @@ export async function GET(request: NextRequest) {
       display_name: profile.display_name,
       phone: profile.phone,
       email: user.email,
+      status: (profile as Record<string, unknown>).status as string ?? 'active',
     },
     usage: usage
       ? { ...usage, daily_limit: limits.daily, monthly_limit: limits.monthly }

@@ -19,7 +19,7 @@ interface Submission {
 }
 
 interface DashboardData {
-  profile: { display_name: string; phone: string; email: string }
+  profile: { display_name: string; phone: string; email: string; status?: string }
   usage: {
     tier: string
     uploads_today: number
@@ -86,6 +86,11 @@ export default function DashboardPage() {
       }
 
       const json = await res.json()
+      if (json.profile?.status === 'pending') {
+        setIsPending(true)
+        setLoading(false)
+        return
+      }
       setData(json)
       setLoading(false)
     }
@@ -131,11 +136,11 @@ export default function DashboardPage() {
             </p>
 
             <p className="text-gray-600 text-sm leading-relaxed mb-6">
-              Your Google account is linked. The admin needs to activate your student account before you can access the dashboard.
+              Your account is registered. The admin needs to activate it before you can access the dashboard — this usually takes a few hours.
             </p>
 
             <a
-              href={`https://wa.me/9647754822210?text=${encodeURIComponent(`Hi, I just signed up for StudyAI with Google.\nEmail: ${googleUser?.email ?? ''}\nPlease activate my account. Thank you!`)}`}
+              href={`https://wa.me/9647754822210?text=${encodeURIComponent(`Hi, I just registered for StudyAI.\nEmail: ${googleUser?.email ?? ''}\nPlease activate my account. Thank you!`)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold py-3 rounded-xl transition mb-3"

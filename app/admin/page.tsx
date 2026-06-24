@@ -58,6 +58,14 @@ interface PendingStudent {
   signed_up_at: string
 }
 
+interface SelfRegStudent {
+  id: string
+  display_name: string
+  phone: string
+  email: string
+  created_at: string
+}
+
 export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authed, setAuthed] = useState(false)
@@ -76,8 +84,14 @@ export default function AdminPage() {
 
   // Students
   const [pending, setPending] = useState<PendingStudent[]>([])
+  const [selfRegPending, setSelfRegPending] = useState<SelfRegStudent[]>([])
   const [students, setStudents] = useState<Student[]>([])
   const [studentsLoaded, setStudentsLoaded] = useState(false)
+  const [selfRegActivatingId, setSelfRegActivatingId] = useState<string | null>(null)
+  const [selfRegTier, setSelfRegTier] = useState<Record<string, string>>({})
+  const [selfRegProExpiry, setSelfRegProExpiry] = useState<Record<string, string>>({})
+  const [selfRegMsg, setSelfRegMsg] = useState<{ text: string; ok: boolean; id: string } | null>(null)
+  const [selfRegLoading, setSelfRegLoading] = useState(false)
   // Which pending student is being activated
   const [activatingId, setActivatingId] = useState<string | null>(null)
   const [activateForm, setActivateForm] = useState({ displayName: '', phone: '', tier: 'free', proExpiry: '' })
@@ -115,6 +129,7 @@ export default function AdminPage() {
     const res = await fetch('/api/auth/students', { headers: { 'Authorization': `Bearer ${pw}` } })
     const data = await res.json()
     setPending(data.pending || [])
+    setSelfRegPending(data.selfRegPending || [])
     setStudents(data.students || [])
     setStudentsLoaded(true)
   }, [])
@@ -154,6 +169,38 @@ export default function AdminPage() {
       setCreateMsg({ text: 'Network error.', ok: false })
     } finally {
       setCreateLoading(false)
+    }
+  }
+
+  async function handleActivateSelfReg(student: SelfRegStudent) {
+    const tier = selfRegTier[student.id] ?? 'free'
+    const proExpiry = selfRegProExpiry[student.id] ?? ''
+    setSelfRegLoading(true)
+    try {
+      const res = await fetch('/api/auth/activate-student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${password}` },
+        body: JSON.stringify({
+          userId: student.id,
+          displayName: student.display_name,
+          phone: student.phone,
+          tier,
+          ...(tier === 'pro_monthly' && proExpiry ? { proExpiry } : {}),
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setSelfRegMsg({ text: 'Activated!', ok: true, id: student.id })
+        setSelfRegActivatingId(null)
+        setStudentsLoaded(false)
+        loadStudents(password)
+      } else {
+        setSelfRegMsg({ text: data.message || 'Failed to activate.', ok: false, id: student.id })
+      }
+    } catch {
+      setSelfRegMsg({ text: 'Network error.', ok: false, id: student.id })
+    } finally {
+      setSelfRegLoading(false)
     }
   }
 
@@ -341,7 +388,7 @@ export default function AdminPage() {
               {tab === 'overview' ? '📈 Overview'
                : tab === 'codes' ? '🔑 Unlock Codes'
                : tab === 'submissions' ? '📋 Submissions'
-               : `👨‍🎓 Students${pending.length > 0 ? ` (${pending.length} pending)` : ''}`}
+               : `👨‍🎓 Students${(pending.length + selfRegPending.length) > 0 ? ` (${pending.length + selfRegPending.length} pending)` : ''}`}
             </button>
           ))}
         </div>
@@ -711,6 +758,117 @@ export default function AdminPage() {
                                 >
                                   Cancel
                                 </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Self-Registered Pending ── */}
+                <div className="bg-gray-800 rounded-xl overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-700">
+                    <h2 className="font-semibold text-gray-200">
+                      📝 Self-Registered — Pending Activation
+                      {selfRegPending.length > 0 && (
+                        <span className="ml-2 bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{selfRegPending.length}</span>
+                      )}
+                    </h2>
+                    <p className="text-gray-400 text-xs mt-0.5">Students who registered via the sign-up form and are waiting for you to activate them</p>
+                  </div>
+
+                  {selfRegPending.length === 0 ? (
+                    <div className="px-5 py-8 text-center">
+                      <p className="text-gray-500 text-sm">No self-registered students pending.</p>
+                      <p className="text-gray-600 text-xs mt-1">When a student registers at /register, they appear here.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-700/50">
+                      {selfRegPending.map(s => (
+                        <div key={s.id} className="p-5">
+                          <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-full bg-blue-800 flex items-center justify-center text-lg flex-shrink-0 font-bold text-blue-200">
+                              {s.display_name?.[0]?.toUpperCase() ?? '?'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white font-semibold text-sm">{s.display_name}</p>
+                              <p className="text-gray-400 text-xs">{s.email}</p>
+                              <p className="text-gray-500 text-xs font-mono mt-0.5">{s.phone}</p>
+                            </div>
+                            <div className="flex-shrink-0 text-right">
+                              <p className="text-gray-500 text-xs">{timeAgo(s.created_at)}</p>
+                              {selfRegActivatingId !== s.id && (
+                                <button
+                                  onClick={() => { setSelfRegActivatingId(s.id); setSelfRegMsg(null) }}
+                                  className="mt-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition"
+                                >
+                                  Activate →
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {selfRegActivatingId === s.id && (
+                            <div className="mt-3 bg-gray-700/50 rounded-xl p-4 space-y-3 border border-gray-600">
+                              <p className="text-xs text-gray-300 font-medium">
+                                Activate <span className="text-white">{s.display_name}</span> ({s.email})
+                              </p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="text-xs text-gray-400 mb-1 block">Plan / Tier</label>
+                                  <select
+                                    value={selfRegTier[s.id] ?? 'free'}
+                                    onChange={e => setSelfRegTier(t => ({ ...t, [s.id]: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-gray-600 border border-gray-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                  >
+                                    <option value="free">Free (2/day)</option>
+                                    <option value="single_unlock">Single Unlock</option>
+                                    <option value="pro_monthly">Pro Monthly</option>
+                                  </select>
+                                </div>
+                                {(selfRegTier[s.id] ?? 'free') === 'pro_monthly' && (
+                                  <div>
+                                    <label className="text-xs text-gray-400 mb-1 block">Pro Expiry (optional)</label>
+                                    <input
+                                      type="date"
+                                      value={selfRegProExpiry[s.id] ?? ''}
+                                      onChange={e => setSelfRegProExpiry(t => ({ ...t, [s.id]: e.target.value }))}
+                                      className="w-full px-3 py-2 bg-gray-600 border border-gray-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+
+                              {selfRegMsg?.id === s.id && (
+                                <p className={`text-xs font-medium ${selfRegMsg.ok ? 'text-green-400' : 'text-red-400'}`}>
+                                  {selfRegMsg.ok ? '✅ ' : '❌ '}{selfRegMsg.text}
+                                </p>
+                              )}
+
+                              <div className="flex items-center gap-2 pt-1 flex-wrap">
+                                <button
+                                  onClick={() => handleActivateSelfReg(s)}
+                                  disabled={selfRegLoading}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 text-sm"
+                                >
+                                  {selfRegLoading ? 'Activating…' : '✓ Confirm Activation'}
+                                </button>
+                                <button
+                                  onClick={() => { setSelfRegActivatingId(null); setSelfRegMsg(null) }}
+                                  className="bg-gray-600 hover:bg-gray-500 text-gray-200 px-4 py-2 rounded-lg transition text-sm"
+                                >
+                                  Cancel
+                                </button>
+                                <a
+                                  href={`https://wa.me/${s.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`✅ Your StudyAI account is now active!\n\nGo to: ${SITE_URL}/login\nSign in with your email: ${s.email}\n\nWelcome aboard! 🎓`)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-[#25D366] hover:underline"
+                                >
+                                  📱 WhatsApp after activation
+                                </a>
                               </div>
                             </div>
                           )}

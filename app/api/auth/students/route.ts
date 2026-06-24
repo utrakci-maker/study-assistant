@@ -14,17 +14,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
   }
 
-  // Get all auth users and all student profiles in parallel
   const [{ data: { users } }, { data: profiles }] = await Promise.all([
     supabaseAdmin.auth.admin.listUsers({ perPage: 1000 }),
-    supabaseAdmin.from('student_profiles').select('id, display_name, phone, notes, created_at'),
+    supabaseAdmin.from('student_profiles').select('id, display_name, phone, notes, status, created_at'),
   ])
 
-  const profileMap = new Map((profiles ?? []).map(p => [p.id, p]))
+  const allProfileMap = new Map((profiles ?? []).map(p => [p.id, p]))
 
-  // Pending: auth users who signed in with Google but have no profile yet
-  const pending = users
-    .filter(u => !profileMap.has(u.id) && u.email && u.app_metadata?.provider === 'google')
+  // Pending Google OAuth: auth user with no profile at all, signed in via Google
+  const googlePending = users
+    .filter(u => !allProfileMap.has(u.id) && u.email && u.app_metadata?.provider === 'google')
     .map(u => ({
       id: u.id,
       email: u.email ?? '',
@@ -34,12 +33,30 @@ export async function GET(request: NextRequest) {
     }))
     .sort((a, b) => new Date(b.signed_up_at).getTime() - new Date(a.signed_up_at).getTime())
 
-  // Activated: auth users who have a profile
-  const activatedUsers = users.filter(u => profileMap.has(u.id))
-  const userEmailMap = new Map(activatedUsers.map(u => [u.id, u.email ?? '']))
+  // Self-registered pending: profile exists with status='pending'
+  const userEmailMap = new Map(users.map(u => [u.id, u.email ?? '']))
+  const selfRegPending = (profiles ?? [])
+    .filter(p => (p as Record<string, unknown>).status as string === 'pending')
+    .map(p => ({
+      id: p.id,
+      display_name: p.display_name,
+      phone: p.phone,
+      email: userEmailMap.get(p.id) ?? '',
+      created_at: p.created_at,
+    }))
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
-  // Fetch usage/tier for all activated students
-  const phones = (profiles ?? []).map(p => p.phone).filter(Boolean)
+  // Activated: profile with status='active' (or null/undefined from before status column was added)
+  const activatedProfiles = (profiles ?? []).filter(p => {
+    const s = (p as Record<string, unknown>).status as string | null
+    return s === 'active' || s == null
+  })
+  const activatedProfileMap = new Map(activatedProfiles.map(p => [p.id, p]))
+  const activatedUsers = users.filter(u => activatedProfileMap.has(u.id))
+  const activatedEmailMap = new Map(activatedUsers.map(u => [u.id, u.email ?? '']))
+
+  // Fetch usage/tier for activated students
+  const phones = activatedProfiles.map(p => p.phone).filter(Boolean)
   const emails = activatedUsers.map(u => u.email ?? '').filter(Boolean)
   const orParts = [
     ...phones.map(ph => `user_phone.eq.${ph}`),
@@ -56,9 +73,9 @@ export async function GET(request: NextRequest) {
   const usageByEmail = new Map((usages ?? []).filter(u => u.user_email).map(u => [u.user_email, u]))
   const usageByPhone = new Map((usages ?? []).filter(u => u.user_phone).map(u => [u.user_phone, u]))
 
-  const students = (profiles ?? [])
+  const students = activatedProfiles
     .map(p => {
-      const email = userEmailMap.get(p.id) ?? ''
+      const email = activatedEmailMap.get(p.id) ?? ''
       const usage = usageByEmail.get(email) ?? usageByPhone.get(p.phone)
       return {
         id: p.id,
@@ -74,5 +91,5 @@ export async function GET(request: NextRequest) {
     })
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
-  return NextResponse.json({ pending, students })
+  return NextResponse.json({ pending: googlePending, selfRegPending, students })
 }

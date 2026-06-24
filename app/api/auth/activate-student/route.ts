@@ -33,26 +33,41 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Student auth account not found' }, { status: 404 })
   }
 
-  // Check profile doesn't already exist
+  // Check if profile already exists (self-registered pending or already active)
   const { data: existingProfile } = await supabaseAdmin
     .from('student_profiles')
-    .select('id')
+    .select('id, status')
     .eq('id', userId)
     .maybeSingle()
 
   if (existingProfile) {
-    return NextResponse.json({ message: 'Student is already activated' }, { status: 409 })
-  }
-
-  // Create student profile
-  const { error: profileError } = await supabaseAdmin.from('student_profiles').insert({
-    id: userId,
-    display_name: displayName.trim(),
-    phone: phone.trim(),
-  })
-
-  if (profileError) {
-    return NextResponse.json({ message: 'Failed to create profile: ' + profileError.message }, { status: 500 })
+    const currentStatus = (existingProfile as Record<string, unknown>).status as string ?? 'active'
+    if (currentStatus === 'active') {
+      return NextResponse.json({ message: 'Student is already activated' }, { status: 409 })
+    }
+    // Self-registered pending → set to active and update name/phone if provided
+    const { error: updateError } = await supabaseAdmin
+      .from('student_profiles')
+      .update({
+        status: 'active',
+        display_name: displayName.trim(),
+        phone: phone.trim(),
+      })
+      .eq('id', userId)
+    if (updateError) {
+      return NextResponse.json({ message: 'Failed to activate: ' + updateError.message }, { status: 500 })
+    }
+  } else {
+    // Google OAuth pending → create profile
+    const { error: profileError } = await supabaseAdmin.from('student_profiles').insert({
+      id: userId,
+      display_name: displayName.trim(),
+      phone: phone.trim(),
+      status: 'active',
+    })
+    if (profileError) {
+      return NextResponse.json({ message: 'Failed to create profile: ' + profileError.message }, { status: 500 })
+    }
   }
 
   // Create/update usage_tracking with tier

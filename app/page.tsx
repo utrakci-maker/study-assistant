@@ -348,6 +348,12 @@ export default function LandingPage() {
                   {lang === 'ar' ? 'تسجيل الدخول' : lang === 'ku' ? 'چوونەژوورەوە' : 'Sign In'}
                 </Link>
                 <Link
+                  href="/register"
+                  className="text-sm text-blue-600 hover:text-blue-800 transition hidden sm:block font-semibold"
+                >
+                  {lang === 'ar' ? 'إنشاء حساب' : lang === 'ku' ? 'تۆمارکردن' : 'Register'}
+                </Link>
+                <Link
                   href="/upload"
                   className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg text-sm transition shadow-sm"
                 >
