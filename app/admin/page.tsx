@@ -10,6 +10,7 @@ interface Stats {
   totalUsers: number
   freeUsers: number
   proUsers: number
+  singleUsers: number
   totalCacheHits: number
   cachedItems: number
   codesTotal: number
@@ -366,7 +367,34 @@ export default function AdminPage() {
               <h2 className="font-semibold text-gray-200 mb-4">User Breakdown</h2>
               <div className="space-y-3">
                 <TierBar label="Free" count={stats.freeUsers} total={stats.totalUsers} color="bg-gray-500" />
+                <TierBar label="Single Unlock" count={stats.singleUsers ?? 0} total={stats.totalUsers} color="bg-blue-500" />
                 <TierBar label="Pro Monthly" count={stats.proUsers} total={stats.totalUsers} color="bg-purple-500" />
+              </div>
+            </div>
+
+            {/* Revenue estimate */}
+            <div className="bg-gray-800 rounded-xl p-5">
+              <h2 className="font-semibold text-gray-200 mb-4">💰 Revenue Estimate</h2>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center justify-between py-2 border-b border-gray-700">
+                  <div>
+                    <p className="text-purple-300 font-medium">👑 Pro Monthly ({stats.proUsers} students)</p>
+                    <p className="text-gray-400 text-xs">25,000 IQD × {stats.proUsers}/mo</p>
+                  </div>
+                  <p className="text-white font-bold">{(stats.proUsers * 25000).toLocaleString()} IQD</p>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-gray-700">
+                  <div>
+                    <p className="text-blue-300 font-medium">⚡ Single Unlock ({stats.singleUsers ?? 0} students)</p>
+                    <p className="text-gray-400 text-xs">5,000 IQD × {stats.singleUsers ?? 0} (one-time)</p>
+                  </div>
+                  <p className="text-white font-bold">{((stats.singleUsers ?? 0) * 5000).toLocaleString()} IQD</p>
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <p className="text-gray-300 font-semibold">Est. Monthly Revenue</p>
+                  <p className="text-green-400 font-extrabold text-lg">{(stats.proUsers * 25000).toLocaleString()} IQD</p>
+                </div>
+                <p className="text-gray-500 text-xs">≈ ${(stats.proUsers * 25000 / 1310).toFixed(0)} USD · Based on activated student tiers</p>
               </div>
             </div>
           </div>

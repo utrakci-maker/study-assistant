@@ -98,8 +98,8 @@ export async function checkTierLimits(userPhone: string, userEmail?: string): Pr
       tier = 'free'
       await supabase
         .from('usage_tracking')
-        .update({ tier: 'free' })
-        .eq('user_phone', userPhone)
+        .update({ tier: 'free', pro_expires_at: null })
+        .eq('id', resetUsage.id)
     }
   }
 
@@ -169,25 +169,27 @@ export async function incrementUploadCount(userPhone: string): Promise<void> {
 // ─────────────────────────────────────────────────────────────
 
 export async function resetDailyLimitIfNeeded(usage: UsageRecord): Promise<UsageRecord> {
-  const today = new Date().toISOString().split('T')[0] // "2024-01-15"
-  const lastReset = usage.last_reset_date
+  const today = new Date().toISOString().split('T')[0]
+  const now = new Date()
+  const firstOfMonthStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`
 
-  if (lastReset !== today) {
-    // It's a new day — reset the daily counter
-    const { data: updated } = await supabase
-      .from('usage_tracking')
-      .update({
-        uploads_today: 0,
-        last_reset_date: today,
-      })
-      .eq('user_phone', usage.user_phone)
-      .select()
-      .single()
+  const needsDaily = usage.last_reset_date !== today
+  const needsMonthly = !usage.monthly_reset_date || usage.monthly_reset_date < firstOfMonthStr
 
-    return updated || usage
-  }
+  if (!needsDaily && !needsMonthly) return usage
 
-  return usage
+  const updates: Record<string, number | string> = {}
+  if (needsDaily) { updates.uploads_today = 0; updates.last_reset_date = today }
+  if (needsMonthly) { updates.uploads_this_month = 0; updates.monthly_reset_date = firstOfMonthStr }
+
+  const { data: updated } = await supabase
+    .from('usage_tracking')
+    .update(updates)
+    .eq('id', usage.id)
+    .select()
+    .single()
+
+  return updated || usage
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -251,7 +253,18 @@ export async function checkEmailTierLimits(userEmail: string): Promise<TierCheck
   }
 
   const resetUsage = await resetDailyLimitIfNeeded(usage)
-  const tier = resetUsage.tier
+  let tier = resetUsage.tier
+
+  if (tier === 'pro_monthly' && resetUsage.pro_expires_at) {
+    if (new Date(resetUsage.pro_expires_at) < new Date()) {
+      tier = 'free'
+      await supabase
+        .from('usage_tracking')
+        .update({ tier: 'free', pro_expires_at: null })
+        .eq('id', resetUsage.id)
+    }
+  }
+
   const limits = LIMITS[tier as keyof typeof LIMITS] || LIMITS.free
 
   if (resetUsage.uploads_today >= limits.daily) {

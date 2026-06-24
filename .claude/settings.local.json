@@ -13,7 +13,8 @@
       "PowerShell($env:PATH += \";C:\\\\Program Files\\\\nodejs\"; cd \"C:\\\\Users\\\\Utrakci\\\\study-assistant\"; node_modules\\\\.bin\\\\next build)",
       "PowerShell($result = Get-ChildItem \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" -ErrorAction SilentlyContinue; if \\($result\\) { $result.FullName } else { \"not found at Program Files\" })",
       "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;\" + $env:PATH; cd \"C:\\\\Users\\\\Utrakci\\\\study-assistant\"; & \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" node_modules\\\\.bin\\\\next build)",
-      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;\" + $env:PATH; cd \"C:\\\\Users\\\\Utrakci\\\\study-assistant\"; & \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \"node_modules\\\\next\\\\dist\\\\bin\\\\next\" build)"
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\nodejs;\" + $env:PATH; cd \"C:\\\\Users\\\\Utrakci\\\\study-assistant\"; & \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \"node_modules\\\\next\\\\dist\\\\bin\\\\next\" build)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\Git\\\\bin;C:\\\\Program Files\\\\nodejs;\" + $env:PATH; cd \"C:\\\\Users\\\\Utrakci\\\\study-assistant\"; & \"C:\\\\Program Files\\\\nodejs\\\\node.exe\" \"node_modules\\\\next\\\\dist\\\\bin\\\\next\" build)"
     ]
   }
 }

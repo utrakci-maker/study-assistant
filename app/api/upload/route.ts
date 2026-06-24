@@ -39,20 +39,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Invalid form data.' }, { status: 400 })
   }
 
-  const phone = (formData.get('phone') as string | null)?.trim()
-  const emailRaw = (formData.get('email') as string | null)?.trim()
   const imageFile = formData.get('image') as File | null
-
-  if (!phone) {
-    return NextResponse.json({ message: 'Phone number is required.' }, { status: 400 })
-  }
-  if (!emailRaw) {
-    return NextResponse.json({ message: 'Email address is required.' }, { status: 400 })
-  }
-  const emailValidationError = validateEmail(emailRaw)
-  if (emailValidationError) {
-    return NextResponse.json({ message: emailValidationError }, { status: 400 })
-  }
   if (!imageFile || imageFile.size === 0) {
     return NextResponse.json({ message: 'Image is required.' }, { status: 400 })
   }
@@ -60,17 +47,52 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Image is too large. Please use a photo under 5MB.' }, { status: 400 })
   }
 
-  // Normalize phone: strip spaces, dashes, brackets, dots
-  const normalizedPhone = phone.replace(/[\s\-\(\)\.]/g, '')
+  // ── STEP 1b: Resolve identity — auth token or anonymous phone+email ──
+  let normalizedPhone: string
+  let normalizedEmail: string
 
-  // Validate: must be + followed by 7–15 digits, or just 7–15 digits
-  if (!/^\+?[0-9]{7,15}$/.test(normalizedPhone)) {
-    return NextResponse.json({
-      message: 'Please enter a valid phone number (7–15 digits, e.g. 07501234567 or +9647501234567).',
-    }, { status: 400 })
+  const studentToken = request.headers.get('x-student-token')
+
+  if (studentToken) {
+    // Logged-in student path: verify their Supabase session token
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(studentToken)
+    if (authError || !user?.email) {
+      return NextResponse.json({ message: 'Session expired. Please sign in again.' }, { status: 401 })
+    }
+    const { data: profile } = await supabaseAdmin
+      .from('student_profiles')
+      .select('phone')
+      .eq('id', user.id)
+      .single()
+    if (!profile) {
+      return NextResponse.json({ message: 'Account not yet activated. Please contact your admin.' }, { status: 403 })
+    }
+    normalizedPhone = profile.phone
+    normalizedEmail = user.email.toLowerCase().trim()
+  } else {
+    // Anonymous path: phone + email must be in the form data
+    const phone = (formData.get('phone') as string | null)?.trim()
+    const emailRaw = (formData.get('email') as string | null)?.trim()
+
+    if (!phone) {
+      return NextResponse.json({ message: 'Phone number is required.' }, { status: 400 })
+    }
+    if (!emailRaw) {
+      return NextResponse.json({ message: 'Email address is required.' }, { status: 400 })
+    }
+    const emailValidationError = validateEmail(emailRaw)
+    if (emailValidationError) {
+      return NextResponse.json({ message: emailValidationError }, { status: 400 })
+    }
+
+    normalizedPhone = phone.replace(/[\s\-\(\)\.]/g, '')
+    if (!/^\+?[0-9]{7,15}$/.test(normalizedPhone)) {
+      return NextResponse.json({
+        message: 'Please enter a valid phone number (7–15 digits, e.g. 07501234567 or +9647501234567).',
+      }, { status: 400 })
+    }
+    normalizedEmail = normalizeEmail(emailRaw)
   }
-
-  const normalizedEmail = normalizeEmail(emailRaw)
 
   // ── STEP 2: Check tier limits for BOTH phone and email ────────
   // This prevents abuse: changing your phone number won't help if
