@@ -1,0 +1,260 @@
+'use client'
+
+export const dynamic = 'force-dynamic'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { supabaseBrowser } from '@/lib/supabaseBrowser'
+
+interface Submission {
+  id: string
+  topic_title: string
+  detected_language: string
+  status: string
+  tier_used: string
+  created_at: string
+}
+
+interface DashboardData {
+  profile: {
+    display_name: string
+    phone: string
+    email: string
+  }
+  usage: {
+    tier: string
+    uploads_today: number
+    uploads_this_month: number
+    pro_expires_at: string | null
+  } | null
+  submissions: Submission[]
+}
+
+const TIER_INFO: Record<string, { label: string; bg: string; text: string; icon: string }> = {
+  free:          { label: 'Free Plan',      bg: 'bg-gray-100',   text: 'text-gray-700',   icon: '🆓' },
+  single_unlock: { label: 'Single Unlock',  bg: 'bg-blue-100',   text: 'text-blue-700',   icon: '⚡' },
+  pro_monthly:   { label: 'Pro Monthly',    bg: 'bg-purple-100', text: 'text-purple-700', icon: '👑' },
+}
+
+const LANG_LABELS: Record<string, string> = {
+  ar: '🇮🇶 Arabic',
+  ku: '🏔️ Kurdish',
+  en: '🇬🇧 English',
+}
+
+export default function DashboardPage() {
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const router = useRouter()
+
+  useEffect(() => {
+    async function load() {
+      const { data: { session } } = await supabaseBrowser.auth.getSession()
+      if (!session) { router.replace('/login'); return }
+
+      const res = await fetch('/api/dashboard/data', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+      })
+      if (res.status === 401) { router.replace('/login'); return }
+      if (!res.ok) {
+        setError('Failed to load dashboard. Please try again.')
+        setLoading(false)
+        return
+      }
+      const json = await res.json()
+      setData(json)
+      setLoading(false)
+    }
+    load()
+  }, [router])
+
+  async function handleLogout() {
+    await supabaseBrowser.auth.signOut()
+    router.replace('/login')
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="text-5xl animate-pulse">📚</div>
+          <p className="text-gray-500 text-sm">Loading your dashboard…</p>
+        </div>
+      </main>
+    )
+  }
+
+  if (error || !data) {
+    return (
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="text-center bg-white rounded-2xl p-8 shadow-sm max-w-sm w-full">
+          <div className="text-4xl mb-3">⚠️</div>
+          <p className="text-red-500 mb-4 text-sm">{error || 'Something went wrong.'}</p>
+          <Link href="/login" className="text-blue-600 hover:underline text-sm">Back to login</Link>
+        </div>
+      </main>
+    )
+  }
+
+  const tier = data.usage?.tier ?? 'free'
+  const tierInfo = TIER_INFO[tier] ?? TIER_INFO.free
+  const uploadsToday = data.usage?.uploads_today ?? 0
+  const uploadsMonth = data.usage?.uploads_this_month ?? 0
+  const proExpiry = data.usage?.pro_expires_at
+
+  return (
+    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+
+      {/* Top bar */}
+      <div className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-10">
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-2xl">🎓</Link>
+            <div>
+              <h1 className="font-bold text-gray-900 leading-none text-sm sm:text-base">
+                {data.profile.display_name}
+              </h1>
+              <p className="text-gray-400 text-xs mt-0.5 hidden sm:block">{data.profile.email}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${tierInfo.bg} ${tierInfo.text}`}>
+              {tierInfo.icon} {tierInfo.label}
+            </span>
+            <button
+              onClick={handleLogout}
+              className="text-xs text-gray-400 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-center">
+            <div className="text-2xl font-bold text-gray-900">{data.submissions.length}</div>
+            <div className="text-xs text-gray-500 mt-1">Total Uploads</div>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-center">
+            <div className="text-2xl font-bold text-gray-900">{uploadsToday}</div>
+            <div className="text-xs text-gray-500 mt-1">Today</div>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-center">
+            <div className="text-2xl font-bold text-gray-900">{uploadsMonth}</div>
+            <div className="text-xs text-gray-500 mt-1">This Month</div>
+          </div>
+        </div>
+
+        {/* Pro expiry banner */}
+        {tier === 'pro_monthly' && proExpiry && (
+          <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 flex items-center gap-3">
+            <span className="text-2xl">👑</span>
+            <div>
+              <p className="font-semibold text-purple-900 text-sm">Pro Plan Active</p>
+              <p className="text-purple-700 text-xs mt-0.5">
+                Expires {new Date(proExpiry).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Free tier upgrade hint */}
+        {tier === 'free' && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3">
+            <span className="text-2xl">🚀</span>
+            <div className="flex-1">
+              <p className="font-semibold text-amber-900 text-sm">Free Plan — 2 uploads/day</p>
+              <p className="text-amber-700 text-xs mt-0.5">Upgrade for unlimited daily uploads.</p>
+            </div>
+            <Link href="/unlock" className="flex-shrink-0 text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-2 rounded-lg transition">
+              Upgrade
+            </Link>
+          </div>
+        )}
+
+        {/* Upload CTA */}
+        <Link
+          href="/upload"
+          className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-2xl py-4 font-bold shadow-sm hover:shadow-md transition-all"
+        >
+          <span className="text-xl">📤</span>
+          Upload New Study Material
+        </Link>
+
+        {/* Submissions list */}
+        <div>
+          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 px-1">
+            My Study Sessions ({data.submissions.length})
+          </h2>
+
+          {data.submissions.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
+              <div className="text-5xl mb-3">📂</div>
+              <p className="text-gray-600 font-semibold text-sm">No uploads yet</p>
+              <p className="text-gray-400 text-xs mt-1">Upload your first study material to get started.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {data.submissions.map(sub => (
+                <Link
+                  key={sub.id}
+                  href={`/results/${sub.id}`}
+                  className="flex items-start justify-between gap-3 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:shadow-md hover:border-blue-200 transition-all group"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm truncate group-hover:text-blue-700 transition-colors">
+                      {sub.topic_title || '⏳ Processing…'}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-xs text-gray-400">
+                        {new Date(sub.created_at).toLocaleDateString('en-GB', {
+                          day: '2-digit', month: 'short', year: 'numeric',
+                        })}
+                      </span>
+                      {sub.detected_language && (
+                        <>
+                          <span className="text-gray-300 text-xs">·</span>
+                          <span className="text-xs text-gray-400">
+                            {LANG_LABELS[sub.detected_language] ?? sub.detected_language}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+                    {sub.tier_used === 'pro_monthly' && (
+                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">Pro</span>
+                    )}
+                    <span className={`text-xs w-6 h-6 rounded-full flex items-center justify-center font-bold ${
+                      sub.status === 'complete' ? 'bg-green-100 text-green-600' :
+                      sub.status === 'failed' ? 'bg-red-100 text-red-600' :
+                      'bg-yellow-100 text-yellow-600'
+                    }`}>
+                      {sub.status === 'complete' ? '✓' : sub.status === 'failed' ? '✗' : '…'}
+                    </span>
+                    <span className="text-gray-300 group-hover:text-blue-400 transition-colors text-sm">→</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-center gap-4 text-sm text-gray-400 pb-8 pt-2">
+          <Link href="/upload" className="hover:text-blue-600 transition">Upload</Link>
+          <span>·</span>
+          <Link href="/unlock" className="hover:text-blue-600 transition">Upgrade Plan</Link>
+          <span>·</span>
+          <button onClick={handleLogout} className="hover:text-red-500 transition">Sign Out</button>
+        </div>
+      </div>
+    </main>
+  )
+}

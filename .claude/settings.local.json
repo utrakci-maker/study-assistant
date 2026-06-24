@@ -8,7 +8,8 @@
       "PowerShell(git *)",
       "PowerShell(npm uninstall *)",
       "PowerShell(git rm *)",
-      "PowerShell(npm run *)"
+      "PowerShell(npm run *)",
+      "PowerShell(Remove-Item *)"
     ]
   }
 }
