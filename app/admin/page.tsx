@@ -48,13 +48,12 @@ interface Student {
   created_at: string
 }
 
-function generatePassword(): string {
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
-  let pwd = ''
-  for (let i = 0; i < 10; i++) {
-    pwd += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return pwd
+interface PendingStudent {
+  id: string
+  email: string
+  name: string
+  avatar_url: string
+  signed_up_at: string
 }
 
 export default function AdminPage() {
@@ -74,15 +73,14 @@ export default function AdminPage() {
   const [createMsg, setCreateMsg] = useState<{ text: string; ok: boolean } | null>(null)
 
   // Students
+  const [pending, setPending] = useState<PendingStudent[]>([])
   const [students, setStudents] = useState<Student[]>([])
   const [studentsLoaded, setStudentsLoaded] = useState(false)
-  const [studentForm, setStudentForm] = useState({
-    displayName: '', email: '', phone: '', pwd: '', tier: 'free', proExpiry: '',
-  })
-  const [studentLoading, setStudentLoading] = useState(false)
-  const [studentMsg, setStudentMsg] = useState<{ text: string; ok: boolean } | null>(null)
-  const [lastCreated, setLastCreated] = useState<{ displayName: string; email: string; password: string } | null>(null)
-  const [copiedCreds, setCopiedCreds] = useState(false)
+  // Which pending student is being activated
+  const [activatingId, setActivatingId] = useState<string | null>(null)
+  const [activateForm, setActivateForm] = useState({ displayName: '', phone: '', tier: 'free', proExpiry: '' })
+  const [activateLoading, setActivateLoading] = useState(false)
+  const [activateMsg, setActivateMsg] = useState<{ text: string; ok: boolean; id: string } | null>(null)
 
   const loadData = useCallback(async (pw: string) => {
     setLoading(true)
@@ -109,6 +107,7 @@ export default function AdminPage() {
   const loadStudents = useCallback(async (pw: string) => {
     const res = await fetch('/api/auth/students', { headers: { 'Authorization': `Bearer ${pw}` } })
     const data = await res.json()
+    setPending(data.pending || [])
     setStudents(data.students || [])
     setStudentsLoaded(true)
   }, [])
@@ -151,61 +150,72 @@ export default function AdminPage() {
     }
   }
 
-  async function handleCreateStudent(e: React.FormEvent) {
-    e.preventDefault()
-    const { displayName, email, phone, pwd, tier, proExpiry } = studentForm
-    if (!displayName.trim() || !email.trim() || !phone.trim() || !pwd.trim()) {
-      setStudentMsg({ text: 'All fields are required.', ok: false })
+  function startActivating(student: PendingStudent) {
+    setActivatingId(student.id)
+    setActivateForm({
+      displayName: student.name,
+      phone: '',
+      tier: 'free',
+      proExpiry: '',
+    })
+    setActivateMsg(null)
+  }
+
+  async function handleActivate(studentId: string) {
+    const { displayName, phone, tier, proExpiry } = activateForm
+    if (!displayName.trim() || !phone.trim()) {
+      setActivateMsg({ text: 'Name and phone are required.', ok: false, id: studentId })
       return
     }
-    setStudentLoading(true)
-    setStudentMsg(null)
-    setLastCreated(null)
+    setActivateLoading(true)
     try {
-      const res = await fetch('/api/auth/create-student', {
+      const res = await fetch('/api/auth/activate-student', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${password}` },
         body: JSON.stringify({
+          userId: studentId,
           displayName: displayName.trim(),
-          email: email.trim(),
           phone: phone.trim(),
-          password: pwd,
           tier,
           ...(tier === 'pro_monthly' && proExpiry ? { proExpiry } : {}),
         }),
       })
       const data = await res.json()
       if (res.ok) {
-        setLastCreated({ displayName: displayName.trim(), email: email.trim().toLowerCase(), password: pwd })
-        setStudentMsg({ text: `Account created for ${displayName.trim()}!`, ok: true })
-        setStudentForm({ displayName: '', email: '', phone: '', pwd: '', tier: 'free', proExpiry: '' })
+        setActivateMsg({ text: 'Student activated!', ok: true, id: studentId })
+        setActivatingId(null)
         setStudentsLoaded(false)
         loadStudents(password)
       } else {
-        setStudentMsg({ text: data.message || 'Failed to create account.', ok: false })
+        setActivateMsg({ text: data.message || 'Failed to activate.', ok: false, id: studentId })
       }
     } catch {
-      setStudentMsg({ text: 'Network error.', ok: false })
+      setActivateMsg({ text: 'Network error.', ok: false, id: studentId })
     } finally {
-      setStudentLoading(false)
+      setActivateLoading(false)
     }
-  }
-
-  function copyCredentials(name: string, email: string, pwd: string) {
-    const msg = `مرحبا ${name} 🎓\nتم إنشاء حسابك في StudyAI!\n\nالبريد الإلكتروني: ${email}\nكلمة المرور: ${pwd}\nرابط الدخول: ${SITE_URL}/login\n\n---\nHi ${name} 👋\nYour StudyAI account is ready!\n\nEmail: ${email}\nPassword: ${pwd}\nLogin: ${SITE_URL}/login`
-    navigator.clipboard.writeText(msg).then(() => {
-      setCopiedCreds(true)
-      setTimeout(() => setCopiedCreds(false), 3000)
-    })
   }
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
+  function formatShortDate(iso: string) {
+    return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+
   function maskPhone(phone: string) {
     if (!phone || phone.length < 6) return phone
     return phone.slice(0, 4) + '****' + phone.slice(-3)
+  }
+
+  function timeAgo(iso: string) {
+    const diff = Date.now() - new Date(iso).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 60) return `${mins}m ago`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return `${hrs}h ago`
+    return `${Math.floor(hrs / 24)}d ago`
   }
 
   // Login screen
@@ -276,7 +286,7 @@ export default function AdminPage() {
               {tab === 'overview' ? '📈 Overview'
                : tab === 'codes' ? '🔑 Unlock Codes'
                : tab === 'submissions' ? '📋 Submissions'
-               : '👨‍🎓 Students'}
+               : `👨‍🎓 Students${pending.length > 0 ? ` (${pending.length} pending)` : ''}`}
             </button>
           ))}
         </div>
@@ -478,193 +488,202 @@ export default function AdminPage() {
         {activeTab === 'students' && (
           <div className="space-y-6">
 
-            {/* Create student form */}
-            <div className="bg-gray-800 rounded-xl p-5">
-              <h2 className="font-semibold text-gray-200 mb-4">Create Student Account</h2>
-              <form onSubmit={handleCreateStudent} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Full Name</label>
-                    <input
-                      type="text"
-                      placeholder="Ahmed Mohammed"
-                      value={studentForm.displayName}
-                      onChange={e => setStudentForm(f => ({ ...f, displayName: e.target.value }))}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Email Address</label>
-                    <input
-                      type="email"
-                      placeholder="ahmed@email.com"
-                      value={studentForm.email}
-                      onChange={e => setStudentForm(f => ({ ...f, email: e.target.value }))}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Phone Number</label>
-                    <input
-                      type="tel"
-                      placeholder="+9647501234567"
-                      value={studentForm.phone}
-                      onChange={e => setStudentForm(f => ({ ...f, phone: e.target.value }))}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Password</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Min 6 characters"
-                        value={studentForm.pwd}
-                        onChange={e => setStudentForm(f => ({ ...f, pwd: e.target.value }))}
-                        className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setStudentForm(f => ({ ...f, pwd: generatePassword() }))}
-                        className="px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg text-xs transition whitespace-nowrap"
-                      >
-                        🎲 Generate
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Plan / Tier</label>
-                    <select
-                      value={studentForm.tier}
-                      onChange={e => setStudentForm(f => ({ ...f, tier: e.target.value }))}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    >
-                      <option value="free">Free (2/day)</option>
-                      <option value="single_unlock">Single Unlock</option>
-                      <option value="pro_monthly">Pro Monthly</option>
-                    </select>
-                  </div>
-                  {studentForm.tier === 'pro_monthly' && (
+            {/* ── Pending Activation ── */}
+            {!studentsLoaded ? (
+              <p className="text-gray-400 text-sm text-center py-12 animate-pulse">Loading students…</p>
+            ) : (
+              <>
+                <div className="bg-gray-800 rounded-xl overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-700 flex items-center justify-between">
                     <div>
-                      <label className="text-xs text-gray-400 mb-1 block">Pro Expiry Date (optional)</label>
-                      <input
-                        type="date"
-                        value={studentForm.proExpiry}
-                        onChange={e => setStudentForm(f => ({ ...f, proExpiry: e.target.value }))}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      />
+                      <h2 className="font-semibold text-gray-200">
+                        🟡 Pending Activation
+                        {pending.length > 0 && (
+                          <span className="ml-2 bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{pending.length}</span>
+                        )}
+                      </h2>
+                      <p className="text-gray-400 text-xs mt-0.5">Students who signed in with Google and need activation</p>
+                    </div>
+                    <button
+                      onClick={() => { setStudentsLoaded(false); loadStudents(password) }}
+                      className="text-xs text-gray-400 hover:text-gray-200 transition"
+                    >
+                      ↻ Reload
+                    </button>
+                  </div>
+
+                  {pending.length === 0 ? (
+                    <div className="px-5 py-8 text-center">
+                      <p className="text-gray-500 text-sm">No pending students.</p>
+                      <p className="text-gray-600 text-xs mt-1">When a student signs in with Google, they appear here.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-700/50">
+                      {pending.map(p => (
+                        <div key={p.id} className="p-5">
+                          {/* Student info row */}
+                          <div className="flex items-center gap-3 mb-3">
+                            {p.avatar_url ? (
+                              <img src={p.avatar_url} alt="" className="w-10 h-10 rounded-full border border-gray-600 flex-shrink-0" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center text-lg flex-shrink-0">
+                                {p.name?.[0]?.toUpperCase() ?? p.email?.[0]?.toUpperCase() ?? '?'}
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white font-semibold text-sm">{p.name || '(no name)'}</p>
+                              <p className="text-gray-400 text-xs truncate">{p.email}</p>
+                            </div>
+                            <div className="flex-shrink-0 text-right">
+                              <p className="text-gray-500 text-xs">{timeAgo(p.signed_up_at)}</p>
+                              {activatingId !== p.id && (
+                                <button
+                                  onClick={() => startActivating(p)}
+                                  className="mt-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition"
+                                >
+                                  Activate →
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* WhatsApp quick link */}
+                          {activatingId !== p.id && (
+                            <a
+                              href={`https://wa.me/?text=${encodeURIComponent(`✅ Your StudyAI account is activated!\n\nGo to: ${SITE_URL}/login\nSign in with your Google account (${p.email})\n\nWelcome aboard! 🎓`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs text-[#25D366] hover:underline"
+                            >
+                              📱 Send WhatsApp after activation
+                            </a>
+                          )}
+
+                          {/* Inline activation form */}
+                          {activatingId === p.id && (
+                            <div className="mt-3 bg-gray-700/50 rounded-xl p-4 space-y-3 border border-gray-600">
+                              <p className="text-xs text-gray-300 font-medium">Activate account for <span className="text-white">{p.email}</span></p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                  <label className="text-xs text-gray-400 mb-1 block">Display Name</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Ahmed Mohammed"
+                                    value={activateForm.displayName}
+                                    onChange={e => setActivateForm(f => ({ ...f, displayName: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-gray-600 border border-gray-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs text-gray-400 mb-1 block">Phone Number</label>
+                                  <input
+                                    type="tel"
+                                    placeholder="+9647501234567"
+                                    value={activateForm.phone}
+                                    onChange={e => setActivateForm(f => ({ ...f, phone: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-gray-600 border border-gray-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs text-gray-400 mb-1 block">Plan / Tier</label>
+                                  <select
+                                    value={activateForm.tier}
+                                    onChange={e => setActivateForm(f => ({ ...f, tier: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-gray-600 border border-gray-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                                  >
+                                    <option value="free">Free (2/day)</option>
+                                    <option value="single_unlock">Single Unlock</option>
+                                    <option value="pro_monthly">Pro Monthly</option>
+                                  </select>
+                                </div>
+                                {activateForm.tier === 'pro_monthly' && (
+                                  <div>
+                                    <label className="text-xs text-gray-400 mb-1 block">Pro Expiry (optional)</label>
+                                    <input
+                                      type="date"
+                                      value={activateForm.proExpiry}
+                                      onChange={e => setActivateForm(f => ({ ...f, proExpiry: e.target.value }))}
+                                      className="w-full px-3 py-2 bg-gray-600 border border-gray-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+
+                              {activateMsg?.id === p.id && (
+                                <p className={`text-xs font-medium ${activateMsg.ok ? 'text-green-400' : 'text-red-400'}`}>
+                                  {activateMsg.ok ? '✅ ' : '❌ '}{activateMsg.text}
+                                </p>
+                              )}
+
+                              <div className="flex gap-2 pt-1">
+                                <button
+                                  onClick={() => handleActivate(p.id)}
+                                  disabled={activateLoading}
+                                  className="bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 text-sm"
+                                >
+                                  {activateLoading ? 'Activating…' : '✓ Confirm Activation'}
+                                </button>
+                                <button
+                                  onClick={() => { setActivatingId(null); setActivateMsg(null) }}
+                                  className="bg-gray-600 hover:bg-gray-500 text-gray-200 px-4 py-2 rounded-lg transition text-sm"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
 
-                {studentMsg && (
-                  <p className={`text-sm font-medium ${studentMsg.ok ? 'text-green-400' : 'text-red-400'}`}>
-                    {studentMsg.ok ? '✅ ' : '❌ '}{studentMsg.text}
-                  </p>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={studentLoading}
-                  className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-2 rounded-lg transition disabled:opacity-50 text-sm"
-                >
-                  {studentLoading ? 'Creating account…' : '+ Create Student Account'}
-                </button>
-              </form>
-            </div>
-
-            {/* Credential card shown after creation */}
-            {lastCreated && (
-              <div className="bg-green-900/40 border border-green-700 rounded-xl p-5">
-                <h3 className="font-semibold text-green-300 mb-3 flex items-center gap-2">
-                  <span>✅</span> Account created! Share these credentials with the student:
-                </h3>
-                <div className="bg-gray-900 rounded-lg p-4 font-mono text-sm space-y-1.5 text-gray-200">
-                  <p><span className="text-gray-500">Name:    </span>{lastCreated.displayName}</p>
-                  <p><span className="text-gray-500">Email:   </span>{lastCreated.email}</p>
-                  <p><span className="text-gray-500">Password:</span> <span className="text-yellow-300 font-bold">{lastCreated.password}</span></p>
-                  <p><span className="text-gray-500">Login:   </span>{SITE_URL}/login</p>
+                {/* ── Activated Students ── */}
+                <div className="bg-gray-800 rounded-xl overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-700">
+                    <h2 className="font-semibold text-gray-200">✅ Activated Students ({students.length})</h2>
+                  </div>
+                  {students.length === 0 ? (
+                    <p className="text-gray-400 text-sm text-center py-8">No activated students yet.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-gray-400 text-xs border-b border-gray-700">
+                            <th className="text-left px-5 py-3">Name</th>
+                            <th className="text-left px-5 py-3">Email</th>
+                            <th className="text-left px-5 py-3">Phone</th>
+                            <th className="text-left px-5 py-3">Plan</th>
+                            <th className="text-left px-5 py-3">Uploads/mo</th>
+                            <th className="text-left px-5 py-3">Joined</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {students.map(s => (
+                            <tr key={s.id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
+                              <td className="px-5 py-3 text-white font-medium">{s.display_name}</td>
+                              <td className="px-5 py-3 text-gray-300 text-xs">{s.email}</td>
+                              <td className="px-5 py-3 text-gray-400 font-mono text-xs">{maskPhone(s.phone)}</td>
+                              <td className="px-5 py-3">
+                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                  s.tier === 'pro_monthly' ? 'bg-purple-900 text-purple-300' :
+                                  s.tier === 'single_unlock' ? 'bg-blue-900 text-blue-300' :
+                                  'bg-gray-700 text-gray-400'
+                                }`}>
+                                  {s.tier === 'pro_monthly' ? '👑 Pro' : s.tier === 'single_unlock' ? '⚡ Single' : '🆓 Free'}
+                                </span>
+                              </td>
+                              <td className="px-5 py-3 text-gray-400">{s.uploads_this_month}</td>
+                              <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">{formatShortDate(s.created_at)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-wrap gap-3 mt-3">
-                  <button
-                    onClick={() => copyCredentials(lastCreated.displayName, lastCreated.email, lastCreated.password)}
-                    className="bg-green-600 hover:bg-green-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition"
-                  >
-                    {copiedCreds ? '✅ Copied!' : '📋 Copy WhatsApp Message'}
-                  </button>
-                  <a
-                    href={`https://wa.me/?text=${encodeURIComponent(
-                      `مرحبا ${lastCreated.displayName} 🎓\nتم إنشاء حسابك في StudyAI!\n\nالبريد الإلكتروني: ${lastCreated.email}\nكلمة المرور: ${lastCreated.password}\nرابط الدخول: ${SITE_URL}/login\n\n---\nHi ${lastCreated.displayName} 👋\nYour StudyAI account is ready!\n\nEmail: ${lastCreated.email}\nPassword: ${lastCreated.password}\nLogin: ${SITE_URL}/login`
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-[#25D366] hover:bg-[#20bd5a] text-white text-sm font-semibold px-4 py-2 rounded-lg transition"
-                  >
-                    📱 Send via WhatsApp
-                  </a>
-                </div>
-              </div>
+              </>
             )}
-
-            {/* Students list */}
-            <div className="bg-gray-800 rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-700 flex items-center justify-between">
-                <h2 className="font-semibold text-gray-200">All Students ({students.length})</h2>
-                <button
-                  onClick={() => { setStudentsLoaded(false); loadStudents(password) }}
-                  className="text-xs text-gray-400 hover:text-gray-200 transition"
-                >
-                  ↻ Reload
-                </button>
-              </div>
-
-              {!studentsLoaded ? (
-                <p className="text-gray-400 text-sm text-center py-8 animate-pulse">Loading students…</p>
-              ) : students.length === 0 ? (
-                <p className="text-gray-400 text-sm text-center py-8">No student accounts yet. Create one above.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-gray-400 text-xs border-b border-gray-700">
-                        <th className="text-left px-5 py-3">Name</th>
-                        <th className="text-left px-5 py-3">Email</th>
-                        <th className="text-left px-5 py-3">Phone</th>
-                        <th className="text-left px-5 py-3">Plan</th>
-                        <th className="text-left px-5 py-3">Uploads/mo</th>
-                        <th className="text-left px-5 py-3">Joined</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {students.map(s => (
-                        <tr key={s.id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                          <td className="px-5 py-3 text-white font-medium">{s.display_name}</td>
-                          <td className="px-5 py-3 text-gray-300 text-xs">{s.email}</td>
-                          <td className="px-5 py-3 text-gray-400 font-mono text-xs">{maskPhone(s.phone)}</td>
-                          <td className="px-5 py-3">
-                            <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                              s.tier === 'pro_monthly' ? 'bg-purple-900 text-purple-300' :
-                              s.tier === 'single_unlock' ? 'bg-blue-900 text-blue-300' :
-                              'bg-gray-700 text-gray-400'
-                            }`}>
-                              {s.tier === 'pro_monthly' ? '👑 Pro'
-                               : s.tier === 'single_unlock' ? '⚡ Single'
-                               : '🆓 Free'}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3 text-gray-400">{s.uploads_this_month}</td>
-                          <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">
-                            {new Date(s.created_at).toLocaleDateString('en-GB', {
-                              day: '2-digit', month: 'short', year: 'numeric',
-                            })}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
           </div>
         )}
 

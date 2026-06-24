@@ -17,34 +17,25 @@ interface Submission {
 }
 
 interface DashboardData {
-  profile: {
-    display_name: string
-    phone: string
-    email: string
-  }
-  usage: {
-    tier: string
-    uploads_today: number
-    uploads_this_month: number
-    pro_expires_at: string | null
-  } | null
+  profile: { display_name: string; phone: string; email: string }
+  usage: { tier: string; uploads_today: number; uploads_this_month: number; pro_expires_at: string | null } | null
   submissions: Submission[]
 }
 
 const TIER_INFO: Record<string, { label: string; bg: string; text: string; icon: string }> = {
-  free:          { label: 'Free Plan',      bg: 'bg-gray-100',   text: 'text-gray-700',   icon: '🆓' },
-  single_unlock: { label: 'Single Unlock',  bg: 'bg-blue-100',   text: 'text-blue-700',   icon: '⚡' },
-  pro_monthly:   { label: 'Pro Monthly',    bg: 'bg-purple-100', text: 'text-purple-700', icon: '👑' },
+  free:          { label: 'Free Plan',     bg: 'bg-gray-100',   text: 'text-gray-700',   icon: '🆓' },
+  single_unlock: { label: 'Single Unlock', bg: 'bg-blue-100',   text: 'text-blue-700',   icon: '⚡' },
+  pro_monthly:   { label: 'Pro Monthly',   bg: 'bg-purple-100', text: 'text-purple-700', icon: '👑' },
 }
 
 const LANG_LABELS: Record<string, string> = {
-  ar: '🇮🇶 Arabic',
-  ku: '🏔️ Kurdish',
-  en: '🇬🇧 English',
+  ar: '🇮🇶 Arabic', ku: '🏔️ Kurdish', en: '🇬🇧 English',
 }
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
+  const [isPending, setIsPending] = useState(false)
+  const [googleUser, setGoogleUser] = useState<{ name: string; email: string; avatar: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const router = useRouter()
@@ -54,15 +45,33 @@ export default function DashboardPage() {
       const { data: { session } } = await supabaseBrowser.auth.getSession()
       if (!session) { router.replace('/login'); return }
 
+      // Store Google user info for the pending screen
+      const meta = session.user.user_metadata ?? {}
+      setGoogleUser({
+        name: meta.name ?? meta.full_name ?? session.user.email ?? '',
+        email: session.user.email ?? '',
+        avatar: meta.avatar_url ?? meta.picture ?? '',
+      })
+
       const res = await fetch('/api/dashboard/data', {
         headers: { 'Authorization': `Bearer ${session.access_token}` },
       })
+
       if (res.status === 401) { router.replace('/login'); return }
+
+      if (res.status === 404) {
+        // Auth user exists but no student_profile yet — pending activation
+        setIsPending(true)
+        setLoading(false)
+        return
+      }
+
       if (!res.ok) {
         setError('Failed to load dashboard. Please try again.')
         setLoading(false)
         return
       }
+
       const json = await res.json()
       setData(json)
       setLoading(false)
@@ -75,6 +84,7 @@ export default function DashboardPage() {
     router.replace('/login')
   }
 
+  // ── Loading screen ──────────────────────────────────────────────────
   if (loading) {
     return (
       <main className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center">
@@ -86,6 +96,53 @@ export default function DashboardPage() {
     )
   }
 
+  // ── Pending activation screen ────────────────────────────────────────
+  if (isPending) {
+    return (
+      <main className="min-h-screen bg-gradient-to-b from-amber-50 to-white flex items-start justify-center p-4 pt-16">
+        <div className="w-full max-w-sm">
+          <div className="bg-white rounded-2xl shadow-sm border border-amber-200 p-7 text-center">
+            {googleUser?.avatar && (
+              <img
+                src={googleUser.avatar}
+                alt=""
+                className="w-16 h-16 rounded-full mx-auto mb-4 border-2 border-amber-200"
+              />
+            )}
+            <div className="text-4xl mb-3">⏳</div>
+            <h1 className="text-xl font-bold text-gray-900 mb-1">Account Pending Activation</h1>
+            <p className="text-gray-500 text-sm mb-1">Signed in as:</p>
+            <p className="font-semibold text-gray-800 text-sm mb-5">
+              {googleUser?.name && <span>{googleUser.name} · </span>}
+              {googleUser?.email}
+            </p>
+
+            <p className="text-gray-600 text-sm leading-relaxed mb-6">
+              Your Google account is linked. The admin needs to activate your student account before you can access the dashboard.
+            </p>
+
+            <a
+              href={`https://wa.me/9647754822210?text=${encodeURIComponent(`Hi, I just signed up for StudyAI with Google.\nEmail: ${googleUser?.email ?? ''}\nPlease activate my account. Thank you!`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold py-3 rounded-xl transition mb-3"
+            >
+              <span className="text-lg">📱</span> Message Admin on WhatsApp
+            </a>
+
+            <button
+              onClick={handleLogout}
+              className="text-xs text-gray-400 hover:text-gray-600 transition"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  // ── Error screen ─────────────────────────────────────────────────────
   if (error || !data) {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -98,6 +155,7 @@ export default function DashboardPage() {
     )
   }
 
+  // ── Full dashboard ───────────────────────────────────────────────────
   const tier = data.usage?.tier ?? 'free'
   const tierInfo = TIER_INFO[tier] ?? TIER_INFO.free
   const uploadsToday = data.usage?.uploads_today ?? 0
@@ -111,7 +169,9 @@ export default function DashboardPage() {
       <div className="bg-white border-b border-gray-100 shadow-sm sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-2xl">🎓</Link>
+            {googleUser?.avatar && (
+              <img src={googleUser.avatar} alt="" className="w-8 h-8 rounded-full border border-gray-200" />
+            )}
             <div>
               <h1 className="font-bold text-gray-900 leading-none text-sm sm:text-base">
                 {data.profile.display_name}
@@ -164,7 +224,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Free tier upgrade hint */}
+        {/* Free tier hint */}
         {tier === 'free' && (
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3">
             <span className="text-2xl">🚀</span>
@@ -220,9 +280,7 @@ export default function DashboardPage() {
                       {sub.detected_language && (
                         <>
                           <span className="text-gray-300 text-xs">·</span>
-                          <span className="text-xs text-gray-400">
-                            {LANG_LABELS[sub.detected_language] ?? sub.detected_language}
-                          </span>
+                          <span className="text-xs text-gray-400">{LANG_LABELS[sub.detected_language] ?? sub.detected_language}</span>
                         </>
                       )}
                     </div>
