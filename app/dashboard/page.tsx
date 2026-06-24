@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabaseBrowser } from '@/lib/supabaseBrowser'
 
+const WHATSAPP = 'https://wa.me/9647754822210'
+
 interface Submission {
   id: string
   topic_title: string
@@ -174,6 +176,9 @@ export default function DashboardPage() {
   const monthlyLimit = data.usage?.monthly_limit ?? 6
   const dailyPct = dailyLimit >= 999 ? 100 : Math.min(100, Math.round((uploadsToday / dailyLimit) * 100))
   const monthlyPct = monthlyLimit >= 999 ? 100 : Math.min(100, Math.round((uploadsMonth / monthlyLimit) * 100))
+  const daysUntilExpiry = tier === 'pro_monthly' && proExpiry
+    ? Math.ceil((new Date(proExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
@@ -196,6 +201,13 @@ export default function DashboardPage() {
             <span className={`text-xs font-semibold px-3 py-1.5 rounded-full ${tierInfo.bg} ${tierInfo.text}`}>
               {tierInfo.icon} {tierInfo.label}
             </span>
+            <Link
+              href="/account"
+              className="text-xs text-gray-400 hover:text-gray-700 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition"
+              title="Account Settings"
+            >
+              ⚙️
+            </Link>
             <button
               onClick={handleLogout}
               className="text-xs text-gray-400 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition"
@@ -275,14 +287,36 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Pro expiry banner */}
-        {tier === 'pro_monthly' && proExpiry && (
+        {/* Pro expiry warning — shown 7 days before expiry */}
+        {daysUntilExpiry !== null && daysUntilExpiry >= 0 && daysUntilExpiry <= 7 && (
+          <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-center gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div className="flex-1">
+              <p className="font-semibold text-amber-900 text-sm">
+                Pro expires in {daysUntilExpiry} day{daysUntilExpiry !== 1 ? 's' : ''}!
+              </p>
+              <p className="text-amber-700 text-xs mt-0.5">Contact admin now to renew before access is removed.</p>
+            </div>
+            <a
+              href={`${WHATSAPP}?text=${encodeURIComponent(`Hi, I need to renew my Pro subscription.\nEmail: ${data.profile.email}\nExpires in ${daysUntilExpiry} day(s). Please help me renew. Thank you!`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-shrink-0 text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-2 rounded-lg transition"
+            >
+              Renew
+            </a>
+          </div>
+        )}
+
+        {/* Pro expiry banner (shown when more than 7 days left) */}
+        {tier === 'pro_monthly' && proExpiry && (daysUntilExpiry === null || daysUntilExpiry > 7) && (
           <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 flex items-center gap-3">
             <span className="text-2xl">👑</span>
             <div className="flex-1">
               <p className="font-semibold text-purple-900 text-sm">Pro Plan Active</p>
               <p className="text-purple-700 text-xs mt-0.5">
                 Expires {new Date(proExpiry).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+                {daysUntilExpiry !== null && ` · ${daysUntilExpiry} days remaining`}
               </p>
             </div>
           </div>

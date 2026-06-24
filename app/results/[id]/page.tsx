@@ -8,6 +8,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import QuizSection from '@/app/components/QuizSection'
 import CopyButton from '@/app/components/CopyButton'
+import PrintButton from '@/app/components/PrintButton'
 
 interface Submission {
   id: string
@@ -152,25 +153,42 @@ export default async function ResultsPage({ params }: { params: { id: string } }
   const explainSections = parseExplanation(s.explanation || '')
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-white" dir={isRTL ? 'rtl' : 'ltr'}>
+    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-white print:bg-white" dir={isRTL ? 'rtl' : 'ltr'}>
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
 
-        {/* ── Nav bar ── */}
-        <div className="flex items-center justify-between py-2">
-          <Link href="/upload" className="text-sm text-blue-600 hover:underline flex items-center gap-1.5 font-medium">
-            {isRTL ? '← رفع صورة جديدة' : '← Upload another'}
-          </Link>
-          <div className="flex items-center gap-2">
-            <Link href="/history" className="text-xs text-gray-400 hover:text-gray-600 transition">
-              {isRTL ? 'سجلّي' : 'My History'}
+        {/* ── Nav bar (hidden on print) ── */}
+        <div className="flex items-center justify-between py-2 print:hidden">
+          <div className="flex items-center gap-3">
+            <Link href="/upload" className="text-sm text-blue-600 hover:underline flex items-center gap-1.5 font-medium">
+              {isRTL ? '← رفع جديد' : '← Upload'}
             </Link>
+            <span className="text-gray-300 text-xs">·</span>
+            <Link href="/dashboard" className="text-sm text-gray-400 hover:text-gray-700 transition">
+              {isRTL ? 'لوحتي' : 'Dashboard'}
+            </Link>
+          </div>
+          <div className="flex items-center gap-2">
             <CopyButton topicTitle={s.topic_title} summary={s.summary} studyPlan={s.study_plan} isRTL={isRTL} />
+            <PrintButton isRTL={isRTL} />
           </div>
         </div>
 
-        {/* ── Limit banner ── */}
+        {/* ── Print-only header ── */}
+        <div className="hidden print:block border-b border-gray-200 pb-5 mb-2">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-2xl">🎓</span>
+            <span className="font-extrabold text-xl text-gray-900">StudyAI</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">{s.topic_title}</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            {new Date(s.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+            {' · '}{langLabel}
+          </p>
+        </div>
+
+        {/* ── Limit banner (hidden on print) ── */}
         {isFree && isAtLimit && (
-          <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-start gap-3">
+          <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-start gap-3 print:hidden">
             <span className="text-2xl flex-shrink-0">🔒</span>
             <div className="flex-1">
               <p className="font-semibold text-amber-900 text-sm">
@@ -192,7 +210,7 @@ export default async function ResultsPage({ params }: { params: { id: string } }
         )}
 
         {isFree && !isAtLimit && (
-          <div className="bg-white border border-gray-100 rounded-2xl px-5 py-3 flex items-center justify-between shadow-sm">
+          <div className="bg-white border border-gray-100 rounded-2xl px-5 py-3 flex items-center justify-between shadow-sm print:hidden">
             <span className="text-sm text-gray-500">
               {isRTL ? 'الرفعات المتبقية اليوم' : 'Free uploads left today'}
             </span>
@@ -290,8 +308,8 @@ export default async function ResultsPage({ params }: { params: { id: string } }
           )}
         </div>
 
-        {/* ── Interactive Quiz ── */}
-        <div>
+        {/* ── Interactive Quiz (hidden on print — not print-friendly) ── */}
+        <div className="print:hidden">
           <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center justify-between px-1">
             <span className="flex items-center gap-2">
               <span>🧠</span>
@@ -304,8 +322,8 @@ export default async function ResultsPage({ params }: { params: { id: string } }
           <QuizSection quiz={s.quiz || []} isRTL={isRTL} />
         </div>
 
-        {/* ── Bottom CTA ── */}
-        <div className="text-center pb-8 pt-4 space-y-3">
+        {/* ── Bottom CTA (hidden on print) ── */}
+        <div className="text-center pb-8 pt-4 space-y-3 print:hidden">
           <Link
             href="/upload"
             className="bg-blue-600 text-white px-8 py-3 rounded-xl hover:bg-blue-700 inline-block font-semibold shadow-sm hover:shadow-md transition-all"
@@ -313,10 +331,15 @@ export default async function ResultsPage({ params }: { params: { id: string } }
             {isRTL ? '← رفع مادة أخرى' : 'Upload Another Subject →'}
           </Link>
           <div className="flex justify-center gap-4 text-sm text-gray-400">
-            <Link href="/history" className="hover:text-gray-600 transition">{isRTL ? 'سجلّي' : 'My History'}</Link>
+            <Link href="/dashboard" className="hover:text-gray-600 transition">{isRTL ? 'لوحتي' : 'Dashboard'}</Link>
             <span>·</span>
             <Link href="/" className="hover:text-gray-600 transition">{isRTL ? 'الرئيسية' : 'Home'}</Link>
           </div>
+        </div>
+
+        {/* ── Print footer ── */}
+        <div className="hidden print:block border-t border-gray-200 pt-4 mt-4 text-center text-xs text-gray-400">
+          StudyAI · study-assistant-ashy.vercel.app · Powered by Claude AI
         </div>
 
       </div>
