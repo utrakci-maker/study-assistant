@@ -1,7 +1,10 @@
 /**
  * app/api/admin/stats/route.ts
- * GET /api/admin/stats?password=xxx
- * Returns dashboard stats — only works with the correct admin password.
+ * GET /api/admin/stats
+ * Authorization: Bearer <ADMIN_PASSWORD>
+ *
+ * Password is sent in the Authorization header, NOT in the URL,
+ * so it never appears in server logs, browser history, or Vercel logs.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -9,9 +12,14 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme'
 
+function checkAuth(request: NextRequest): boolean {
+  const authHeader = request.headers.get('authorization')
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  return token === ADMIN_PASSWORD
+}
+
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  if (searchParams.get('password') !== ADMIN_PASSWORD) {
+  if (!checkAuth(request)) {
     return NextResponse.json({ message: 'Unauthorized.' }, { status: 401 })
   }
 

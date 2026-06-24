@@ -53,10 +53,11 @@ export default function AdminPage() {
 
   const loadData = useCallback(async (pw: string) => {
     setLoading(true)
+    const authHeader = { 'Authorization': `Bearer ${pw}` }
     try {
       const [statsRes, codesRes] = await Promise.all([
-        fetch(`/api/admin/stats?password=${encodeURIComponent(pw)}`),
-        fetch(`/api/admin/codes?password=${encodeURIComponent(pw)}`),
+        fetch('/api/admin/stats', { headers: authHeader }),
+        fetch('/api/admin/codes', { headers: authHeader }),
       ])
       if (statsRes.status === 401) { setAuthError('Wrong password.'); setAuthed(false); return }
       const statsData = await statsRes.json()
@@ -86,8 +87,8 @@ export default function AdminPage() {
     try {
       const res = await fetch('/api/admin/codes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password, type: newType, code: newCode, expiryDays: newExpiry }),
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${password}` },
+        body: JSON.stringify({ type: newType, code: newCode, expiryDays: newExpiry }),
       })
       const data = await res.json()
       if (res.ok) {
