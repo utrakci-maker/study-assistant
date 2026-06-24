@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { sendRegistrationEmail } from '@/lib/email'
 
 export async function POST(request: NextRequest) {
   let body: { email: string; phone: string; displayName: string; password: string }
@@ -66,6 +67,8 @@ export async function POST(request: NextRequest) {
     last_reset_date: today,
     monthly_reset_date: today,
   })
+
+  await sendRegistrationEmail(cleanEmail, cleanName)
 
   return NextResponse.json({ success: true })
 }

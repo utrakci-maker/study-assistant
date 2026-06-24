@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { sendActivationEmail } from '@/lib/email'
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? ''
 
@@ -101,6 +102,8 @@ export async function POST(request: NextRequest) {
       ...(proExpiry ? { pro_expires_at: proExpiry } : {}),
     })
   }
+
+  await sendActivationEmail(cleanEmail, displayName.trim())
 
   return NextResponse.json({ success: true, userId, email: cleanEmail, tier })
 }
