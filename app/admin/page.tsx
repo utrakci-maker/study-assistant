@@ -42,6 +42,7 @@ interface Student {
   display_name: string
   phone: string
   email: string
+  notes: string | null
   tier: string
   uploads_this_month: number
   pro_expires_at: string | null
@@ -81,6 +82,11 @@ export default function AdminPage() {
   const [activateForm, setActivateForm] = useState({ displayName: '', phone: '', tier: 'free', proExpiry: '' })
   const [activateLoading, setActivateLoading] = useState(false)
   const [activateMsg, setActivateMsg] = useState<{ text: string; ok: boolean; id: string } | null>(null)
+  // Which activated student is being edited
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ displayName: '', phone: '', tier: 'free', proExpiry: '', notes: '' })
+  const [editLoading, setEditLoading] = useState(false)
+  const [editMsg, setEditMsg] = useState<{ text: string; ok: boolean } | null>(null)
 
   const loadData = useCallback(async (pw: string) => {
     setLoading(true)
@@ -193,6 +199,54 @@ export default function AdminPage() {
       setActivateMsg({ text: 'Network error.', ok: false, id: studentId })
     } finally {
       setActivateLoading(false)
+    }
+  }
+
+  function startEditing(s: Student) {
+    setEditingId(s.id)
+    setEditForm({
+      displayName: s.display_name,
+      phone: s.phone,
+      tier: s.tier,
+      proExpiry: s.pro_expires_at ? s.pro_expires_at.slice(0, 10) : '',
+      notes: s.notes ?? '',
+    })
+    setEditMsg(null)
+  }
+
+  async function handleEditSave(studentId: string) {
+    const { displayName, phone, tier, proExpiry, notes } = editForm
+    if (!displayName.trim() || !phone.trim()) {
+      setEditMsg({ text: 'Name and phone are required.', ok: false })
+      return
+    }
+    setEditLoading(true)
+    try {
+      const res = await fetch('/api/auth/update-student', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${password}` },
+        body: JSON.stringify({
+          userId: studentId,
+          displayName: displayName.trim(),
+          phone: phone.trim(),
+          tier,
+          proExpiry: tier === 'pro_monthly' && proExpiry ? proExpiry : null,
+          notes: notes.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setEditMsg({ text: 'Changes saved!', ok: true })
+        setEditingId(null)
+        setStudentsLoaded(false)
+        loadStudents(password)
+      } else {
+        setEditMsg({ text: data.message || 'Failed to save.', ok: false })
+      }
+    } catch {
+      setEditMsg({ text: 'Network error.', ok: false })
+    } finally {
+      setEditLoading(false)
     }
   }
 
@@ -646,25 +700,18 @@ export default function AdminPage() {
                   {students.length === 0 ? (
                     <p className="text-gray-400 text-sm text-center py-8">No activated students yet.</p>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-gray-400 text-xs border-b border-gray-700">
-                            <th className="text-left px-5 py-3">Name</th>
-                            <th className="text-left px-5 py-3">Email</th>
-                            <th className="text-left px-5 py-3">Phone</th>
-                            <th className="text-left px-5 py-3">Plan</th>
-                            <th className="text-left px-5 py-3">Uploads/mo</th>
-                            <th className="text-left px-5 py-3">Joined</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {students.map(s => (
-                            <tr key={s.id} className="border-b border-gray-700/50 hover:bg-gray-700/30">
-                              <td className="px-5 py-3 text-white font-medium">{s.display_name}</td>
-                              <td className="px-5 py-3 text-gray-300 text-xs">{s.email}</td>
-                              <td className="px-5 py-3 text-gray-400 font-mono text-xs">{maskPhone(s.phone)}</td>
-                              <td className="px-5 py-3">
+                    <div className="divide-y divide-gray-700/50">
+                      {students.map(s => (
+                        <div key={s.id}>
+                          {/* Student row */}
+                          <div className="flex items-center gap-3 px-5 py-3 hover:bg-gray-700/20">
+                            <div className="flex-1 min-w-0 grid grid-cols-2 md:grid-cols-5 gap-2 items-center text-sm">
+                              <div>
+                                <p className="text-white font-medium truncate">{s.display_name}</p>
+                                <p className="text-gray-400 text-xs truncate">{s.email}</p>
+                              </div>
+                              <p className="text-gray-400 font-mono text-xs hidden md:block">{maskPhone(s.phone)}</p>
+                              <div>
                                 <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                                   s.tier === 'pro_monthly' ? 'bg-purple-900 text-purple-300' :
                                   s.tier === 'single_unlock' ? 'bg-blue-900 text-blue-300' :
@@ -672,13 +719,108 @@ export default function AdminPage() {
                                 }`}>
                                   {s.tier === 'pro_monthly' ? '👑 Pro' : s.tier === 'single_unlock' ? '⚡ Single' : '🆓 Free'}
                                 </span>
-                              </td>
-                              <td className="px-5 py-3 text-gray-400">{s.uploads_this_month}</td>
-                              <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">{formatShortDate(s.created_at)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                                {s.pro_expires_at && s.tier === 'pro_monthly' && (
+                                  <p className="text-gray-500 text-xs mt-0.5">until {formatShortDate(s.pro_expires_at)}</p>
+                                )}
+                              </div>
+                              <p className="text-gray-400 text-xs hidden md:block">{s.uploads_this_month} uploads/mo</p>
+                              {s.notes && (
+                                <p className="text-yellow-400 text-xs truncate hidden md:block" title={s.notes}>
+                                  💰 {s.notes}
+                                </p>
+                              )}
+                            </div>
+                            {editingId !== s.id && (
+                              <button
+                                onClick={() => startEditing(s)}
+                                className="flex-shrink-0 text-xs text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg transition"
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Inline edit form */}
+                          {editingId === s.id && (
+                            <div className="px-5 pb-5 pt-2 bg-gray-700/30 border-t border-gray-700">
+                              <p className="text-xs text-gray-300 font-medium mb-3">Editing: <span className="text-white">{s.display_name}</span></p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                                <div>
+                                  <label className="text-xs text-gray-400 mb-1 block">Display Name</label>
+                                  <input
+                                    type="text"
+                                    value={editForm.displayName}
+                                    onChange={e => setEditForm(f => ({ ...f, displayName: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-gray-600 border border-gray-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs text-gray-400 mb-1 block">Phone</label>
+                                  <input
+                                    type="tel"
+                                    value={editForm.phone}
+                                    onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-gray-600 border border-gray-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs text-gray-400 mb-1 block">Plan / Tier</label>
+                                  <select
+                                    value={editForm.tier}
+                                    onChange={e => setEditForm(f => ({ ...f, tier: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-gray-600 border border-gray-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                  >
+                                    <option value="free">Free (2/day)</option>
+                                    <option value="single_unlock">Single Unlock</option>
+                                    <option value="pro_monthly">Pro Monthly</option>
+                                  </select>
+                                </div>
+                                {editForm.tier === 'pro_monthly' && (
+                                  <div>
+                                    <label className="text-xs text-gray-400 mb-1 block">Pro Expiry Date</label>
+                                    <input
+                                      type="date"
+                                      value={editForm.proExpiry}
+                                      onChange={e => setEditForm(f => ({ ...f, proExpiry: e.target.value }))}
+                                      className="w-full px-3 py-2 bg-gray-600 border border-gray-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                    />
+                                  </div>
+                                )}
+                                <div className="sm:col-span-2">
+                                  <label className="text-xs text-gray-400 mb-1 block">Payment Notes (internal)</label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Paid 25,000 IQD — June 2026"
+                                    value={editForm.notes}
+                                    onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-gray-600 border border-gray-500 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                  />
+                                </div>
+                              </div>
+                              {editMsg && (
+                                <p className={`text-xs font-medium mb-2 ${editMsg.ok ? 'text-green-400' : 'text-red-400'}`}>
+                                  {editMsg.ok ? '✅ ' : '❌ '}{editMsg.text}
+                                </p>
+                              )}
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleEditSave(s.id)}
+                                  disabled={editLoading}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition disabled:opacity-50 text-sm"
+                                >
+                                  {editLoading ? 'Saving…' : '💾 Save Changes'}
+                                </button>
+                                <button
+                                  onClick={() => { setEditingId(null); setEditMsg(null) }}
+                                  className="bg-gray-600 hover:bg-gray-500 text-gray-200 px-4 py-2 rounded-lg transition text-sm"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

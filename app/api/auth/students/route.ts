@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
   // Get all auth users and all student profiles in parallel
   const [{ data: { users } }, { data: profiles }] = await Promise.all([
     supabaseAdmin.auth.admin.listUsers({ perPage: 1000 }),
-    supabaseAdmin.from('student_profiles').select('id, display_name, phone, created_at'),
+    supabaseAdmin.from('student_profiles').select('id, display_name, phone, notes, created_at'),
   ])
 
   const profileMap = new Map((profiles ?? []).map(p => [p.id, p]))
@@ -65,6 +65,7 @@ export async function GET(request: NextRequest) {
         display_name: p.display_name,
         phone: p.phone,
         email,
+        notes: (p as Record<string, unknown>).notes as string | null ?? null,
         tier: usage?.tier ?? 'free',
         uploads_this_month: usage?.uploads_this_month ?? 0,
         pro_expires_at: usage?.pro_expires_at ?? null,

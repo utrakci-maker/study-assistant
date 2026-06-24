@@ -18,8 +18,17 @@ interface Submission {
 
 interface DashboardData {
   profile: { display_name: string; phone: string; email: string }
-  usage: { tier: string; uploads_today: number; uploads_this_month: number; pro_expires_at: string | null } | null
+  usage: {
+    tier: string
+    uploads_today: number
+    uploads_this_month: number
+    pro_expires_at: string | null
+    daily_limit: number
+    monthly_limit: number
+  } | null
   submissions: Submission[]
+  top_topics: { topic: string; count: number }[]
+  streak: number
 }
 
 const TIER_INFO: Record<string, { label: string; bg: string; text: string; icon: string }> = {
@@ -161,6 +170,10 @@ export default function DashboardPage() {
   const uploadsToday = data.usage?.uploads_today ?? 0
   const uploadsMonth = data.usage?.uploads_this_month ?? 0
   const proExpiry = data.usage?.pro_expires_at
+  const dailyLimit = data.usage?.daily_limit ?? 2
+  const monthlyLimit = data.usage?.monthly_limit ?? 6
+  const dailyPct = dailyLimit >= 999 ? 100 : Math.min(100, Math.round((uploadsToday / dailyLimit) * 100))
+  const monthlyPct = monthlyLimit >= 999 ? 100 : Math.min(100, Math.round((uploadsMonth / monthlyLimit) * 100))
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
@@ -195,19 +208,70 @@ export default function DashboardPage() {
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
 
-        {/* Stats */}
+        {/* Stats row */}
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-center">
             <div className="text-2xl font-bold text-gray-900">{data.submissions.length}</div>
             <div className="text-xs text-gray-500 mt-1">Total Uploads</div>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-center">
-            <div className="text-2xl font-bold text-gray-900">{uploadsToday}</div>
-            <div className="text-xs text-gray-500 mt-1">Today</div>
+            <div className="text-2xl font-bold text-gray-900">{data.top_topics.length}</div>
+            <div className="text-xs text-gray-500 mt-1">Subjects</div>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-center">
-            <div className="text-2xl font-bold text-gray-900">{uploadsMonth}</div>
-            <div className="text-xs text-gray-500 mt-1">This Month</div>
+            <div className="text-2xl font-bold text-gray-900 flex items-center justify-center gap-1">
+              {data.streak}
+              <span className="text-base">🔥</span>
+            </div>
+            <div className="text-xs text-gray-500 mt-1">Day Streak</div>
+          </div>
+        </div>
+
+        {/* Usage limits card */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Upload Limits</h3>
+            {tier === 'free' && (
+              <Link href="/unlock" className="text-xs text-blue-600 font-semibold hover:underline">
+                Upgrade →
+              </Link>
+            )}
+          </div>
+
+          {/* Daily */}
+          <div>
+            <div className="flex justify-between text-xs mb-1.5">
+              <span className="text-gray-600 font-medium">Today</span>
+              <span className={`font-bold ${dailyLimit >= 999 ? 'text-green-600' : uploadsToday >= dailyLimit ? 'text-red-500' : 'text-gray-700'}`}>
+                {dailyLimit >= 999 ? '∞ unlimited' : `${uploadsToday} / ${dailyLimit}`}
+              </span>
+            </div>
+            {dailyLimit < 999 && (
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${dailyPct >= 100 ? 'bg-red-400' : dailyPct >= 75 ? 'bg-amber-400' : 'bg-blue-500'}`}
+                  style={{ width: `${dailyPct}%` }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Monthly */}
+          <div>
+            <div className="flex justify-between text-xs mb-1.5">
+              <span className="text-gray-600 font-medium">This Month</span>
+              <span className={`font-bold ${monthlyLimit >= 999 ? 'text-green-600' : uploadsMonth >= monthlyLimit ? 'text-red-500' : 'text-gray-700'}`}>
+                {monthlyLimit >= 999 ? '∞ unlimited' : `${uploadsMonth} / ${monthlyLimit}`}
+              </span>
+            </div>
+            {monthlyLimit < 999 && (
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${monthlyPct >= 100 ? 'bg-red-400' : monthlyPct >= 75 ? 'bg-amber-400' : 'bg-green-500'}`}
+                  style={{ width: `${monthlyPct}%` }}
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -215,7 +279,7 @@ export default function DashboardPage() {
         {tier === 'pro_monthly' && proExpiry && (
           <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 flex items-center gap-3">
             <span className="text-2xl">👑</span>
-            <div>
+            <div className="flex-1">
               <p className="font-semibold text-purple-900 text-sm">Pro Plan Active</p>
               <p className="text-purple-700 text-xs mt-0.5">
                 Expires {new Date(proExpiry).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
@@ -224,16 +288,16 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Free tier hint */}
-        {tier === 'free' && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3">
-            <span className="text-2xl">🚀</span>
+        {/* Free limit reached */}
+        {tier === 'free' && uploadsToday >= dailyLimit && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3">
+            <span className="text-2xl">🔒</span>
             <div className="flex-1">
-              <p className="font-semibold text-amber-900 text-sm">Free Plan — 2 uploads/day</p>
-              <p className="text-amber-700 text-xs mt-0.5">Upgrade for unlimited daily uploads.</p>
+              <p className="font-semibold text-red-900 text-sm">Daily limit reached</p>
+              <p className="text-red-700 text-xs mt-0.5">Resets tomorrow, or upgrade to continue now.</p>
             </div>
-            <Link href="/unlock" className="flex-shrink-0 text-xs bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-2 rounded-lg transition">
-              Upgrade
+            <Link href="/unlock" className="flex-shrink-0 text-xs bg-red-500 hover:bg-red-600 text-white font-bold px-3 py-2 rounded-lg transition">
+              Unlock
             </Link>
           </div>
         )}
@@ -246,6 +310,36 @@ export default function DashboardPage() {
           <span className="text-xl">📤</span>
           Upload New Study Material
         </Link>
+
+        {/* Top Topics */}
+        {data.top_topics.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Most Studied Topics</h3>
+            <div className="space-y-2">
+              {data.top_topics.map((t, i) => {
+                const maxCount = data.top_topics[0]?.count ?? 1
+                const pct = Math.round((t.count / maxCount) * 100)
+                const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
+                return (
+                  <div key={t.topic}>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-gray-700 font-medium truncate flex-1 mr-2">
+                        {medals[i]} {t.topic}
+                      </span>
+                      <span className="text-gray-400 flex-shrink-0">{t.count}×</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-blue-500 rounded-full transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Submissions list */}
         <div>
