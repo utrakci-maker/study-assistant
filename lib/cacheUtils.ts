@@ -37,6 +37,7 @@ export interface QuizItem {
   options: string[]
   correct: string
   explanation: string
+  difficulty?: 'easy' | 'medium' | 'hard'
 }
 
 // ─────────────────────────────────────────────────────────────

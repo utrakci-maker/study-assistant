@@ -86,7 +86,7 @@ export default function PricingPage() {
             <h2 className="text-xl font-bold text-gray-900 mb-1">Pro Monthly</h2>
             <p className="text-gray-500 text-sm mb-4">For serious students</p>
             <div className="mb-6">
-              <span className="text-4xl font-extrabold text-gray-900">$4.99</span>
+              <span className="text-4xl font-extrabold text-gray-900">$10</span>
               <span className="text-gray-400 text-sm ml-1">per month</span>
             </div>
             <ul className="space-y-3 mb-8">
@@ -153,7 +153,7 @@ export default function PricingPage() {
           />
           <FAQ
             q="What if I run out of free uploads?"
-            a="You can contact us on WhatsApp to buy a Single Unlock ($0.99) or a Pro monthly plan ($4.99). We'll send you a code to enter on the unlock page."
+            a="You can contact us on WhatsApp to buy a Single Unlock ($0.99) or a Pro monthly plan ($10). We'll send you a code to enter on the unlock page."
           />
           <FAQ
             q="Is my data private?"
