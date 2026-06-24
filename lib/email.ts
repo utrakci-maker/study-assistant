@@ -97,6 +97,30 @@ export async function sendActivationEmail(to: string, name: string) {
   await send(to, 'Your StudyAI account is now active! 🎉', html)
 }
 
+export async function sendPasswordResetEmail(to: string, resetLink: string) {
+  const html = baseTemplate(`
+    <h2 style="margin:0 0 8px;color:#1e293b;font-size:20px;font-weight:700;">Reset your password 🔑</h2>
+    <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.6;">We received a request to reset the password for your StudyAI account (<strong>${to}</strong>).</p>
+    <div style="text-align:center;margin-bottom:24px;">
+      <a href="${resetLink}"
+         style="display:inline-block;background:#1d4ed8;color:#ffffff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">
+        Reset My Password →
+      </a>
+    </div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 18px;margin-bottom:20px;">
+      <p style="margin:0;color:#64748b;font-size:13px;line-height:1.6;">
+        ⏰ This link expires in <strong>1 hour</strong>.<br>
+        🔒 If you didn't request a password reset, you can safely ignore this email.
+      </p>
+    </div>
+    <p style="margin:0;color:#94a3b8;font-size:13px;text-align:center;">
+      Having trouble? Copy and paste this link into your browser:<br>
+      <span style="color:#3b82f6;font-size:11px;word-break:break-all;">${resetLink}</span>
+    </p>
+  `)
+  await send(to, 'Reset your StudyAI password 🔑', html)
+}
+
 export async function sendProExpiryReminderEmail(to: string, name: string, daysLeft: number, expiryDate: string) {
   const urgency = daysLeft <= 1 ? '🚨 Urgent' : '⚠️ Reminder'
   const html = baseTemplate(`

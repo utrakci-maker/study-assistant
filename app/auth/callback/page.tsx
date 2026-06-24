@@ -12,8 +12,19 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const code = params.get('code')
+    const tokenHash = params.get('token_hash')
+    const type = params.get('type')
 
-    if (code) {
+    if (type === 'recovery' && tokenHash) {
+      // Password reset link — verify OTP then go to reset-password page
+      supabaseBrowser.auth
+        .verifyOtp({ token_hash: tokenHash, type: 'recovery' })
+        .then(({ error }) => {
+          if (error) router.replace('/forgot-password?expired=1')
+          else router.replace('/reset-password')
+        })
+    } else if (code) {
+      // Google OAuth callback
       supabaseBrowser.auth
         .exchangeCodeForSession(code)
         .then(() => router.replace('/dashboard'))
