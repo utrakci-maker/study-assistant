@@ -66,6 +66,15 @@ interface SelfRegStudent {
   created_at: string
 }
 
+interface StudentAnalytics {
+  totals: { total: number; complete: number; failed: number; this_week: number; this_month: number }
+  activity: { date: string; count: number }[]
+  top_topics: { topic: string; count: number }[]
+  language_mix: { lang: string; count: number }[]
+  streak: number
+  last_upload_at: string | null
+}
+
 export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [authed, setAuthed] = useState(false)
@@ -102,6 +111,10 @@ export default function AdminPage() {
   const [editForm, setEditForm] = useState({ displayName: '', phone: '', tier: 'free', proExpiry: '', notes: '' })
   const [editLoading, setEditLoading] = useState(false)
   const [editMsg, setEditMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  // Which activated student's analytics panel is open
+  const [viewingAnalyticsId, setViewingAnalyticsId] = useState<string | null>(null)
+  const [analyticsData, setAnalyticsData] = useState<StudentAnalytics | null>(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
 
   const loadData = useCallback(async (pw: string) => {
     setLoading(true)
@@ -133,6 +146,22 @@ export default function AdminPage() {
     setStudents(data.students || [])
     setStudentsLoaded(true)
   }, [])
+
+  async function toggleAnalytics(s: Student) {
+    if (viewingAnalyticsId === s.id) {
+      setViewingAnalyticsId(null)
+      return
+    }
+    setViewingAnalyticsId(s.id)
+    setAnalyticsData(null)
+    setAnalyticsLoading(true)
+    const params = new URLSearchParams({ email: s.email, phone: s.phone })
+    const res = await fetch(`/api/admin/student-analytics?${params}`, {
+      headers: { 'Authorization': `Bearer ${password}` },
+    })
+    if (res.ok) setAnalyticsData(await res.json())
+    setAnalyticsLoading(false)
+  }
 
   useEffect(() => {
     if (activeTab === 'students' && authed && !studentsLoaded) {
@@ -947,14 +976,35 @@ export default function AdminPage() {
                               )}
                             </div>
                             {editingId !== s.id && (
-                              <button
-                                onClick={() => startEditing(s)}
-                                className="flex-shrink-0 text-xs text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg transition"
-                              >
-                                Edit
-                              </button>
+                              <div className="flex-shrink-0 flex gap-2">
+                                <button
+                                  onClick={() => toggleAnalytics(s)}
+                                  className={`text-xs px-3 py-1.5 rounded-lg transition ${
+                                    viewingAnalyticsId === s.id
+                                      ? 'bg-blue-600 text-white'
+                                      : 'text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600'
+                                  }`}
+                                >
+                                  📊 Analytics
+                                </button>
+                                <button
+                                  onClick={() => startEditing(s)}
+                                  className="text-xs text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg transition"
+                                >
+                                  Edit
+                                </button>
+                              </div>
                             )}
                           </div>
+
+                          {/* Analytics panel */}
+                          {viewingAnalyticsId === s.id && (
+                            <StudentAnalyticsPanel
+                              student={s}
+                              data={analyticsData}
+                              loading={analyticsLoading}
+                            />
+                          )}
 
                           {/* Inline edit form */}
                           {editingId === s.id && (
@@ -1047,6 +1097,140 @@ export default function AdminPage() {
 
       </div>
     </main>
+  )
+}
+
+const ANALYTICS_LANG_LABELS: Record<string, string> = {
+  ar: '🇮🇶 Arabic', ku: '🏔️ Kurdish', en: '🇬🇧 English',
+}
+
+function StudentAnalyticsPanel({ student, data, loading }: {
+  student: Student
+  data: StudentAnalytics | null
+  loading: boolean
+}) {
+  return (
+    <div className="px-5 pb-5 pt-4 bg-gray-900/40 border-t border-gray-700 space-y-4">
+      <p className="text-xs text-gray-300 font-medium">
+        Progress analytics: <span className="text-white">{student.display_name}</span>
+      </p>
+
+      {loading && (
+        <p className="text-xs text-gray-400 py-6 text-center">Loading analytics…</p>
+      )}
+
+      {!loading && !data && (
+        <p className="text-xs text-red-400 py-6 text-center">Failed to load analytics.</p>
+      )}
+
+      {!loading && data && (
+        <>
+          {/* Stat tiles */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { label: 'Total Uploads', value: data.totals.total },
+              { label: 'This Week', value: data.totals.this_week },
+              { label: 'This Month', value: data.totals.this_month },
+              { label: 'Day Streak', value: `${data.streak}🔥` },
+            ].map(t => (
+              <div key={t.label} className="bg-gray-800 rounded-lg p-3 text-center border border-gray-700">
+                <div className="text-lg font-bold text-white">{t.value}</div>
+                <div className="text-xs text-gray-500 mt-0.5">{t.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Activity chart — last 30 days */}
+          {data.totals.total > 0 ? (
+            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+              <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                Activity — Last 30 Days
+              </h4>
+              <ActivityBarChart activity={data.activity} />
+            </div>
+          ) : (
+            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 text-center">
+              <p className="text-gray-500 text-xs">No uploads yet — nothing to show.</p>
+            </div>
+          )}
+
+          {/* Top topics + language mix */}
+          {data.totals.total > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {data.top_topics.length > 0 && (
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Top Topics</h4>
+                  <div className="space-y-2">
+                    {data.top_topics.map(t => {
+                      const maxCount = data.top_topics[0]?.count ?? 1
+                      const pct = Math.round((t.count / maxCount) * 100)
+                      return (
+                        <div key={t.topic}>
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="text-gray-300 truncate flex-1 mr-2">{t.topic}</span>
+                            <span className="text-gray-500 flex-shrink-0">{t.count}×</span>
+                          </div>
+                          <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {data.language_mix.length > 0 && (
+                <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Language Mix</h4>
+                  <div className="space-y-2">
+                    {data.language_mix.map(l => {
+                      const maxCount = data.language_mix[0]?.count ?? 1
+                      const pct = Math.round((l.count / maxCount) * 100)
+                      return (
+                        <div key={l.lang}>
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="text-gray-300">{ANALYTICS_LANG_LABELS[l.lang] ?? l.lang}</span>
+                            <span className="text-gray-500 flex-shrink-0">{l.count}×</span>
+                          </div>
+                          <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                            <div className="h-full bg-teal-500 rounded-full" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function ActivityBarChart({ activity }: { activity: { date: string; count: number }[] }) {
+  const maxCount = Math.max(1, ...activity.map(a => a.count))
+  return (
+    <div className="flex items-end gap-[3px] h-16 overflow-x-auto">
+      {activity.map(a => {
+        const heightPct = Math.round((a.count / maxCount) * 100)
+        const label = new Date(a.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+        return (
+          <div
+            key={a.date}
+            className="flex-1 min-w-[6px] h-full flex items-end"
+            title={`${label}: ${a.count} upload${a.count === 1 ? '' : 's'}`}
+          >
+            <div
+              className={`w-full rounded-t-[3px] transition-all ${a.count > 0 ? 'bg-blue-500' : 'bg-gray-700'}`}
+              style={{ height: a.count > 0 ? `${Math.max(heightPct, 8)}%` : '3px' }}
+            />
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
