@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-opus-4-5',
+      model: 'claude-opus-4-8',
       max_tokens: 2048,
       system: [
         {
@@ -226,8 +226,8 @@ export async function POST(request: NextRequest) {
 
     inputTokens = response.usage.input_tokens
     outputTokens = response.usage.output_tokens
-    // Claude Opus pricing: $15 per 1M input tokens, $75 per 1M output tokens
-    costUsd = (inputTokens / 1_000_000) * 15 + (outputTokens / 1_000_000) * 75
+    // Claude Opus 4.8 pricing: $5 per 1M input tokens, $25 per 1M output tokens
+    costUsd = (inputTokens / 1_000_000) * 5 + (outputTokens / 1_000_000) * 25
 
     const rawText = response.content[0].type === 'text' ? response.content[0].text : ''
     // Strip any markdown code fences Claude might wrap around the JSON
@@ -244,7 +244,7 @@ export async function POST(request: NextRequest) {
         user_phone: normalizedPhone,
         submission_id: submissionId,
         event: 'error',
-        model_used: 'claude-opus-4-5',
+        model_used: 'claude-opus-4-8',
         tokens_input: 0,
         tokens_output: 0,
         cost_usd: 0,
