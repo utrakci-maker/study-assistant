@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
   try {
     const response = await anthropic.messages.create({
       model: 'claude-opus-4-8',
-      max_tokens: 2048,
+      max_tokens: 4096,
       system: [
         {
           type: 'text',
