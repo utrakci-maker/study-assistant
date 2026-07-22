@@ -126,7 +126,7 @@ function UnlockContent() {
             <div className="bg-gray-50 rounded-xl p-4 mb-3 text-sm text-gray-600 space-y-1">
               <p>⚡ <strong>1 extra upload</strong> — $0.99 (IQD equivalent)</p>
               <p>👑 <strong>Pro monthly</strong> — $10/mo — 60 uploads/month</p>
-              <p className="text-xs text-gray-400 pt-1">Pay via ZainCash, FIB, bank transfer, or any method we agree on</p>
+              <p className="text-xs text-gray-400 pt-1">Pay via Superqi easily</p>
             </div>
             <a
               href={whatsappUrl}
