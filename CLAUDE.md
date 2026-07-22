@@ -29,12 +29,10 @@ All core features are live in production: student self-registration + admin appr
 - `lib/prompts.ts` — `STUDY_PROMPT`, the JSON schema Claude must return (7-step plan, 5-section explanation, 5 quiz questions — this is a lot of content, keep `max_tokens` generous)
 - `lib/cacheUtils.ts` — SHA-256 content fingerprint + cache lookup to avoid re-processing identical uploads
 - `app/api/upload/route.ts` — **the** active upload endpoint (calls Claude, saves submission, tracks cost). `maxDuration = 60` (Vercel Hobby plan ceiling). Currently `claude-opus-4-8`, `max_tokens: 4096`.
-- `app/api/process/route.ts` — **dead code**, not called from anywhere in the app. Safe to ignore or delete later.
 - `app/admin/page.tsx` — admin dashboard (password-gated via `ADMIN_PASSWORD` header, not real auth)
 
 ## Known issues / backlog
 
-- `app/api/process/route.ts` is unused dead code — consider deleting.
 - Local dev cannot run with real secrets (see gotcha above) — all testing must go through production or a preview deployment.
 
 ## Day-by-day log
