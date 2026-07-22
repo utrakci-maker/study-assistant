@@ -189,7 +189,9 @@ export async function POST(request: NextRequest) {
     // so extract the plain text ourselves and send that instead.
     let extractedText: string
     try {
-      const ast = await parseOffice(Buffer.from(fileBuffer))
+      // fileType is passed explicitly — magic-byte auto-detection breaks once
+      // officeparser is webpack-bundled for the Vercel serverless function.
+      const ast = await parseOffice(Buffer.from(fileBuffer), { fileType: isDocx ? 'docx' : 'pptx' })
       extractedText = ast.toText().trim()
     } catch (extractError) {
       console.error('Office file extraction error:', extractError)
