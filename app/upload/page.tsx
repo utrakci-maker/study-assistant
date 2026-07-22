@@ -9,7 +9,7 @@ import { validateEmail } from '@/lib/emailUtils'
 import { supabaseBrowser } from '@/lib/supabaseBrowser'
 
 const LOADING_STAGES = [
-  { msg: 'Uploading your image…',         msgAr: 'جاري رفع الصورة…',          pct: 15 },
+  { msg: 'Uploading your file…',          msgAr: 'جاري رفع الملف…',          pct: 15 },
   { msg: 'AI is reading the content…',    msgAr: 'الذكاء الاصطناعي يقرأ المحتوى…', pct: 40 },
   { msg: 'Building your study plan…',     msgAr: 'جاري إنشاء خطة الدراسة…',   pct: 70 },
   { msg: 'Generating quiz questions…',    msgAr: 'جاري إعداد الأسئلة…',        pct: 88 },
@@ -36,8 +36,8 @@ export default function UploadPage() {
   const [returning, setReturning] = useState(false)
 
   // Shared state
-  const [imageFile, setImageFile] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [filePreview, setFilePreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadingStage, setLoadingStage] = useState(0)
   const [error, setError] = useState('')
@@ -76,16 +76,29 @@ export default function UploadPage() {
     return ''
   }
 
-  const applyImage = (file: File) => {
-    setImageFile(file)
-    const reader = new FileReader()
-    reader.onloadend = () => setImagePreview(reader.result as string)
-    reader.readAsDataURL(file)
+  const isAcceptedFile = (file: File) => {
+    if (file.type.startsWith('image/')) return true
+    const name = file.name.toLowerCase()
+    return file.type === 'application/pdf' ||
+      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      file.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+      name.endsWith('.pdf') || name.endsWith('.docx') || name.endsWith('.pptx')
   }
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const applyFile = (file: File) => {
+    setSelectedFile(file)
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader()
+      reader.onloadend = () => setFilePreview(reader.result as string)
+      reader.readAsDataURL(file)
+    } else {
+      setFilePreview(null)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) applyImage(file)
+    if (file) applyFile(file)
   }
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -97,7 +110,7 @@ export default function UploadPage() {
     e.preventDefault()
     setIsDragging(false)
     const file = e.dataTransfer.files?.[0]
-    if (file && file.type.startsWith('image/')) applyImage(file)
+    if (file && isAcceptedFile(file)) applyFile(file)
   }, [])
 
   useEffect(() => {
@@ -120,13 +133,13 @@ export default function UploadPage() {
       if (eErr) { setEmailError(eErr); return }
     }
 
-    if (!imageFile) { setError('Please select or take a photo.'); return }
+    if (!selectedFile) { setError('Please select or take a photo, or choose a file.'); return }
 
     setLoading(true)
     setError('')
 
     const formData = new FormData()
-    formData.append('image', imageFile)
+    formData.append('image', selectedFile)
 
     const headers: Record<string, string> = {}
 
@@ -186,7 +199,7 @@ export default function UploadPage() {
     )
   }
 
-  const isSubmitDisabled = loading || !imageFile || (
+  const isSubmitDisabled = loading || !selectedFile || (
     !authUser && (!phone.trim() || !!phoneError || !email.trim() || !!emailError)
   )
 
@@ -203,7 +216,7 @@ export default function UploadPage() {
           <h1 className="text-2xl font-bold text-gray-900">Upload Study Material</h1>
           <p className="text-gray-500 mt-1 text-sm">
             {authUser
-              ? 'Your account is linked — just pick your photo and go!'
+              ? 'Your account is linked — just pick your file and go!'
               : returning
                 ? 'Welcome back! Your details are pre-filled below.'
                 : 'Get a full study plan + quiz in 30 seconds'}
@@ -296,25 +309,48 @@ export default function UploadPage() {
                 Study Material <span className="text-gray-400 font-normal text-xs">/ مادة الدراسة</span>
               </label>
 
-              <input ref={fileInputRef}   type="file" accept="image/*"                  onChange={handleImageChange} className="hidden" disabled={loading} />
-              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageChange} className="hidden" disabled={loading} />
+              <input ref={fileInputRef}   type="file" accept="image/*,application/pdf,.pdf,.docx,.pptx" onChange={handleFileChange} className="hidden" disabled={loading} />
+              <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleFileChange} className="hidden" disabled={loading} />
 
-              {imagePreview ? (
-                <div className="relative rounded-xl overflow-hidden border border-gray-200 shadow-sm">
-                  <img src={imagePreview} alt="Selected study material" className="w-full object-cover max-h-72" />
-                  {!loading && (
-                    <button
-                      type="button"
-                      onClick={() => { setImageFile(null); setImagePreview(null) }}
-                      className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm transition-colors shadow-lg"
-                    >
-                      ✕
-                    </button>
-                  )}
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3">
-                    <p className="text-white text-xs text-center">✓ Ready to analyse</p>
+              {selectedFile ? (
+                filePreview ? (
+                  <div className="relative rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+                    <img src={filePreview} alt="Selected study material" className="w-full object-cover max-h-72" />
+                    {!loading && (
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedFile(null); setFilePreview(null) }}
+                        className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm transition-colors shadow-lg"
+                      >
+                        ✕
+                      </button>
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-3">
+                      <p className="text-white text-xs text-center">✓ Ready to analyse</p>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="relative rounded-xl border border-gray-200 shadow-sm bg-gray-50 p-6 flex items-center gap-3">
+                    <div className="text-4xl">
+                      {selectedFile.name.toLowerCase().endsWith('.pdf') ? '📕'
+                        : selectedFile.name.toLowerCase().endsWith('.pptx') ? '📊'
+                        : '📘'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{selectedFile.name}</p>
+                      <p className="text-xs text-green-600 mt-0.5">✓ Ready to analyse</p>
+                    </div>
+                    {!loading && (
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedFile(null); setFilePreview(null) }}
+                        className="text-gray-400 hover:text-gray-600 rounded-full w-8 h-8 flex items-center justify-center text-sm transition-colors flex-shrink-0"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                )
               ) : (
                 <div>
                   <div
@@ -330,10 +366,10 @@ export default function UploadPage() {
                   >
                     <div className="text-4xl mb-2">{isDragging ? '📥' : '📄'}</div>
                     <p className="text-gray-700 text-sm font-semibold">
-                      {isDragging ? 'Drop your image here' : 'Drag & drop or click to choose'}
+                      {isDragging ? 'Drop your file here' : 'Drag & drop or click to choose'}
                     </p>
                     <p className="text-gray-400 text-xs mt-1">اسحب وأفلت أو اضغط لاختيار ملف</p>
-                    <p className="text-gray-300 text-xs mt-3">Textbook · Slide · Handwritten notes · Max 5MB</p>
+                    <p className="text-gray-300 text-xs mt-3">Image · PDF · Word · PowerPoint · Max 5MB</p>
                   </div>
 
                   <button

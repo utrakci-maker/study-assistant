@@ -2,12 +2,13 @@
  * app/api/upload/route.ts
  *
  * WHY THIS FILE EXISTS:
- * When a student submits a photo on the upload page, the browser sends it here.
+ * When a student submits study material on the upload page, the browser sends it here.
  * This route does everything in one go:
- * 1. Validates the input (phone + image)
+ * 1. Validates the input (phone + file)
  * 2. Checks if they're allowed to upload (tier limits)
- * 3. Sends the image to Claude AI for analysis
- * 4. Checks the cache (avoids re-processing the same content)
+ * 3. Sends the file to Claude AI for analysis (image/PDF directly; Word/PowerPoint
+ *    are text-extracted first since Claude has no native docx/pptx support)
+ * 4. Checks the cache (avoids re-processing identical content)
  * 5. Saves the result to the database
  * 6. Returns the submission ID so the browser can go to /results/[id]
  *
@@ -21,15 +22,30 @@ export const maxDuration = 300
 
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { parseOffice } from 'officeparser'
 import { supabaseAdmin } from '@/lib/supabase'
 import { checkTierLimits, checkEmailTierLimits, incrementUploadCount, incrementEmailUploadCount } from '@/lib/tiers'
 import { generateFingerprint, checkCache, saveToCache } from '@/lib/cacheUtils'
 import { STUDY_PROMPT } from '@/lib/prompts'
 import { validateEmail, normalizeEmail } from '@/lib/emailUtils'
 
-// Claude only accepts these image formats
+// Claude reads these image formats and PDFs directly
 type ClaudeMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
-const ALLOWED_TYPES: ClaudeMediaType[] = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+const ALLOWED_IMAGE_TYPES: ClaudeMediaType[] = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+const PDF_TYPE = 'application/pdf'
+
+// Word/PowerPoint have no native Claude support — text is extracted server-side first
+const DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+const PPTX_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+const LEGACY_OFFICE_TYPES = ['application/msword', 'application/vnd.ms-powerpoint']
+
+function extOf(filename: string): string {
+  const dot = filename.lastIndexOf('.')
+  return dot === -1 ? '' : filename.slice(dot).toLowerCase()
+}
+
+// Cap extracted document text so a huge Word/PowerPoint file doesn't blow the token budget
+const MAX_EXTRACTED_CHARS = 60_000
 
 export async function POST(request: NextRequest) {
 
@@ -41,12 +57,33 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Invalid form data.' }, { status: 400 })
   }
 
-  const imageFile = formData.get('image') as File | null
-  if (!imageFile || imageFile.size === 0) {
-    return NextResponse.json({ message: 'Image is required.' }, { status: 400 })
+  const uploadedFile = formData.get('image') as File | null
+  if (!uploadedFile || uploadedFile.size === 0) {
+    return NextResponse.json({ message: 'A file is required.' }, { status: 400 })
   }
-  if (imageFile.size > 5 * 1024 * 1024) {
-    return NextResponse.json({ message: 'Image is too large. Please use a photo under 5MB.' }, { status: 400 })
+  if (uploadedFile.size > 5 * 1024 * 1024) {
+    return NextResponse.json({ message: 'File is too large. Please use a file under 5MB.' }, { status: 400 })
+  }
+
+  // ── Detect what kind of file this is (mime type, falling back to extension) ──
+  const rawType = uploadedFile.type?.toLowerCase()
+  const fileExt = extOf(uploadedFile.name || '')
+
+  const isImage = ALLOWED_IMAGE_TYPES.includes(rawType as ClaudeMediaType) || rawType === 'image/jpg'
+  const isPdf = rawType === PDF_TYPE || fileExt === '.pdf'
+  const isDocx = rawType === DOCX_TYPE || fileExt === '.docx'
+  const isPptx = rawType === PPTX_TYPE || fileExt === '.pptx'
+  const isLegacyOffice = LEGACY_OFFICE_TYPES.includes(rawType) || fileExt === '.doc' || fileExt === '.ppt'
+
+  if (isLegacyOffice) {
+    return NextResponse.json({
+      message: 'Old .doc/.ppt formats are not supported. Please save the file as .docx or .pptx and try again.',
+    }, { status: 400 })
+  }
+  if (!isImage && !isPdf && !isDocx && !isPptx) {
+    return NextResponse.json({
+      message: 'Unsupported file type. Please upload an image, PDF, Word (.docx), or PowerPoint (.pptx) file.',
+    }, { status: 400 })
   }
 
   // ── STEP 1b: Resolve identity — auth token or anonymous phone+email ──
@@ -127,31 +164,59 @@ export async function POST(request: NextRequest) {
   // Use the more restrictive of the two tier levels
   const tierCheck = phoneCheck
 
-  // ── STEP 3: Convert image to base64 for Claude ─────────────────
-  // Claude reads the image directly from base64 — no public URL needed
-  const imageBuffer = await imageFile.arrayBuffer()
-  const imageBase64 = Buffer.from(imageBuffer).toString('base64')
+  // ── STEP 3: Read the file and build the content block Claude will see ──
+  const fileBuffer = await uploadedFile.arrayBuffer()
+  const fileBase64 = Buffer.from(fileBuffer).toString('base64')
 
-  // Validate and normalize the media type
-  let mediaType: ClaudeMediaType = 'image/jpeg'
-  const rawType = imageFile.type?.toLowerCase()
-  if (ALLOWED_TYPES.includes(rawType as ClaudeMediaType)) {
-    mediaType = rawType as ClaudeMediaType
-  } else if (rawType === 'image/jpg') {
-    mediaType = 'image/jpeg'
+  let claudeContent: Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam | Anthropic.TextBlockParam
+  let storageContentType: string
+  let storageExt: string
+
+  if (isImage) {
+    let mediaType: ClaudeMediaType = 'image/jpeg'
+    if (ALLOWED_IMAGE_TYPES.includes(rawType as ClaudeMediaType)) {
+      mediaType = rawType as ClaudeMediaType
+    }
+    claudeContent = { type: 'image', source: { type: 'base64', media_type: mediaType, data: fileBase64 } }
+    storageContentType = mediaType
+    storageExt = mediaType.split('/')[1] || 'jpg'
+  } else if (isPdf) {
+    claudeContent = { type: 'document', source: { type: 'base64', media_type: PDF_TYPE, data: fileBase64 } }
+    storageContentType = PDF_TYPE
+    storageExt = 'pdf'
+  } else {
+    // Word (.docx) / PowerPoint (.pptx) — Claude has no native reader for these,
+    // so extract the plain text ourselves and send that instead.
+    let extractedText: string
+    try {
+      const ast = await parseOffice(Buffer.from(fileBuffer))
+      extractedText = ast.toText().trim()
+    } catch (extractError) {
+      console.error('Office file extraction error:', extractError)
+      return NextResponse.json({
+        message: 'Could not read that file. Please make sure it is a valid, non-corrupted .docx or .pptx file.',
+      }, { status: 400 })
+    }
+    if (!extractedText) {
+      return NextResponse.json({
+        message: 'That file appears to be empty or contains no readable text.',
+      }, { status: 400 })
+    }
+    claudeContent = { type: 'text', text: extractedText.slice(0, MAX_EXTRACTED_CHARS) }
+    storageContentType = isDocx ? DOCX_TYPE : PPTX_TYPE
+    storageExt = isDocx ? 'docx' : 'pptx'
   }
 
-  // ── STEP 3b: Upload image to Supabase Storage ─────────────────
-  // Save a copy of the image so students and admins can refer back to it.
+  // ── STEP 3b: Upload the original file to Supabase Storage ──────
+  // Save a copy so students and admins can refer back to it.
   // Wrapped in try/catch — if the 'study-images' bucket doesn't exist yet,
   // we fall back to 'base64-upload' and still process normally.
   let imageUrl = 'base64-upload'
   try {
-    const ext = mediaType.split('/')[1] || 'jpg'
-    const fileName = `${normalizedPhone}/${Date.now()}.${ext}`
+    const fileName = `${normalizedPhone}/${Date.now()}.${storageExt}`
     const { data: storageData } = await supabaseAdmin.storage
       .from('study-images')
-      .upload(fileName, imageBuffer, { contentType: mediaType, upsert: false })
+      .upload(fileName, fileBuffer, { contentType: storageContentType, upsert: false })
 
     if (storageData) {
       const { data: urlData } = supabaseAdmin.storage
@@ -160,7 +225,7 @@ export async function POST(request: NextRequest) {
       imageUrl = urlData.publicUrl
     }
   } catch {
-    // Bucket not set up yet — continue without storing the image
+    // Bucket not set up yet — continue without storing the file
   }
 
   // ── STEP 4: Create the submission record in the database ───────
@@ -182,7 +247,7 @@ export async function POST(request: NextRequest) {
 
   const submissionId = submission.id
 
-  // ── STEP 5: Call Claude AI with the image ──────────────────────
+  // ── STEP 5: Call Claude AI with the study material ──────────────
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
   let aiResult: {
@@ -213,13 +278,10 @@ export async function POST(request: NextRequest) {
         {
           role: 'user',
           content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: mediaType, data: imageBase64 },
-            },
+            claudeContent,
             {
               type: 'text',
-              text: 'Please analyze this educational image and return the JSON study material.',
+              text: 'Please analyze this educational material and return the JSON study material.',
             },
           ],
         },
@@ -255,7 +317,7 @@ export async function POST(request: NextRequest) {
     ])
 
     return NextResponse.json({
-      message: 'AI could not process the image. Please use a clearer, well-lit photo of your study material.',
+      message: 'AI could not process this file. If it is a photo, please use a clearer, well-lit picture. If it is a document, make sure it contains readable text.',
     }, { status: 500 })
   }
 

@@ -343,7 +343,7 @@ export default function LandingPage() {
               <>
                 <Link
                   href="/login"
-                  className="text-sm text-gray-500 hover:text-gray-900 transition hidden sm:block font-medium"
+                  className="text-sm text-gray-500 hover:text-gray-900 transition block font-medium"
                 >
                   {lang === 'ar' ? 'تسجيل الدخول' : lang === 'ku' ? 'چوونەژوورەوە' : 'Sign In'}
                 </Link>

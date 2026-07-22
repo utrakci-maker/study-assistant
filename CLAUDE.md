@@ -1,14 +1,14 @@
 # StudyAI — AI Study Assistant
 
-Lean SaaS for MENA/Iraqi students: upload a photo of study material, get an AI-generated study plan, explanation, and quiz. Owner (utrakci) is a non-developer building this with Claude Code.
+Lean SaaS for MENA/Iraqi students: upload study material (photo, PDF, Word, or PowerPoint), get an AI-generated study plan, explanation, and quiz. Owner (utrakci) is a non-developer building this with Claude Code.
 
 - **Production:** https://study-assistant-ashy.vercel.app
 - **Repo:** github.com/utrakci-maker/study-assistant (public)
 - **Stack:** Next.js 14 (App Router) + TypeScript + Tailwind, Supabase (Postgres + Auth + Storage), Anthropic API, Resend (email), Vercel (hosting + cron).
 
-## Current state (as of Day 19, 2026-07-21)
+## Current state (as of Day 20, 2026-07-22)
 
-All core features are live in production: student self-registration + admin approval, Google OAuth login, admin dashboard (stats/codes/submissions/students tabs), per-student progress analytics (Day 19), manual unlock codes via WhatsApp, forgot-password flow, email notifications, PWA install support.
+All core features are live in production: student self-registration + admin approval, Google OAuth login, admin dashboard (stats/codes/submissions/students tabs), per-student progress analytics (Day 19), manual unlock codes via WhatsApp, forgot-password flow, email notifications, PWA install support, multi-format uploads (image/PDF/Word/PowerPoint, Day 20).
 
 ## Critical gotcha — local dev is broken, test against production instead
 
@@ -28,7 +28,7 @@ All core features are live in production: student self-registration + admin appr
 - `lib/tiers.ts` — tier limits (free: 2/day, 6/mo; single_unlock: 1 upload; pro_monthly: 60/mo)
 - `lib/prompts.ts` — `STUDY_PROMPT`, the JSON schema Claude must return (7-step plan, 5-section explanation, 5 quiz questions — this is a lot of content, keep `max_tokens` generous)
 - `lib/cacheUtils.ts` — SHA-256 content fingerprint + cache lookup to avoid re-processing identical uploads
-- `app/api/upload/route.ts` — **the** active upload endpoint (calls Claude, saves submission, tracks cost). `maxDuration = 300` (Vercel Hobby plan ceiling, raised from the old 60s cap in 2026). Currently `claude-opus-4-8`, `max_tokens: 4096`.
+- `app/api/upload/route.ts` — **the** active upload endpoint (calls Claude, saves submission, tracks cost). `maxDuration = 300` (Vercel Hobby plan ceiling, raised from the old 60s cap in 2026). Currently `claude-opus-4-8`, `max_tokens: 4096`. Accepts images and PDFs directly (Claude's native `image`/`document` content blocks); Word (`.docx`) and PowerPoint (`.pptx`) are text-extracted server-side via `officeparser` (`parseOffice(buffer).toText()`) and sent as a `text` block instead, since Claude has no native docx/pptx reader. Legacy `.doc`/`.ppt` are explicitly rejected with a message to re-save as `.docx`/`.pptx`.
 - `app/admin/page.tsx` — admin dashboard (password-gated via `ADMIN_PASSWORD` header, not real auth)
 
 ## Known issues / backlog
@@ -44,6 +44,7 @@ For full history, `git log --oneline` — commit messages are descriptive per da
 - Day 15–17: self-registration + admin approval, email notifications (Resend), forgot-password flow.
 - Day 18: PWA polish — service worker (prod-only, disabled in dev), auto-generated icons, install prompts.
 - Day 19: per-student analytics panel in admin (30-day activity chart, top topics, language mix); migrated AI processing from `claude-opus-4-5` to `claude-opus-4-8`; fixed a production bug where the migration's old `max_tokens: 2048` was truncating JSON responses (bumped to 4096); added missing `app/robots.ts`; gitignored next-pwa's auto-generated `public/sw.js` / `workbox-*.js` build artifacts.
+- Day 20: fixed uploads getting permanently stuck at "still processing" — raised `maxDuration` from 60s to 300s (Vercel Hobby plan ceiling raised in 2026) since Claude Opus 4.8 was occasionally exceeding the old 60s cap and getting killed mid-request; added auto-refresh to the pending results page. Added multi-format upload support (image/PDF/Word/PowerPoint) — see `app/api/upload/route.ts` note above. Fixed the "Sign In" link being hidden on mobile nav (`hidden sm:block` → always visible) so returning students can find it.
 
 ## Conventions
 
