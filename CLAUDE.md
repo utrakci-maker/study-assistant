@@ -28,7 +28,7 @@ All core features are live in production: student self-registration + admin appr
 - `lib/tiers.ts` — tier limits (free: 2/day, 6/mo; single_unlock: 1 upload; pro_monthly: 60/mo)
 - `lib/prompts.ts` — `STUDY_PROMPT`, the JSON schema Claude must return (7-step plan, 5-section explanation, 5 quiz questions — this is a lot of content, keep `max_tokens` generous)
 - `lib/cacheUtils.ts` — SHA-256 content fingerprint + cache lookup to avoid re-processing identical uploads
-- `app/api/upload/route.ts` — **the** active upload endpoint (calls Claude, saves submission, tracks cost). `maxDuration = 60` (Vercel Hobby plan ceiling). Currently `claude-opus-4-8`, `max_tokens: 4096`.
+- `app/api/upload/route.ts` — **the** active upload endpoint (calls Claude, saves submission, tracks cost). `maxDuration = 300` (Vercel Hobby plan ceiling, raised from the old 60s cap in 2026). Currently `claude-opus-4-8`, `max_tokens: 4096`.
 - `app/admin/page.tsx` — admin dashboard (password-gated via `ADMIN_PASSWORD` header, not real auth)
 
 ## Known issues / backlog

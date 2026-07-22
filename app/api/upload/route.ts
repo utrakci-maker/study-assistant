@@ -11,11 +11,13 @@
  * 5. Saves the result to the database
  * 6. Returns the submission ID so the browser can go to /results/[id]
  *
- * maxDuration = 60 tells Vercel to allow up to 60 seconds for this route.
- * Claude AI can take 15-30 seconds, so we need more than the default 10s.
+ * maxDuration = 300 tells Vercel to allow up to 5 minutes for this route
+ * (the current Hobby plan ceiling). Claude Opus can occasionally take over
+ * 60s to generate the full 4096-token JSON response, which was silently
+ * killing the function mid-request and leaving submissions stuck as 'pending'.
  */
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'

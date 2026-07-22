@@ -10,6 +10,7 @@ import QuizSection from '@/app/components/QuizSection'
 import CopyButton from '@/app/components/CopyButton'
 import PrintButton from '@/app/components/PrintButton'
 import WhatsAppShareButton from '@/app/components/WhatsAppShareButton'
+import AutoRefresh from '@/app/components/AutoRefresh'
 
 const SITE_URL = 'https://study-assistant-ashy.vercel.app'
 
@@ -130,10 +131,11 @@ export default async function ResultsPage({ params }: { params: { id: string } }
   if (submission.status === 'pending') {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <AutoRefresh />
         <div className="max-w-md text-center bg-white rounded-2xl shadow-sm p-8">
           <div className="text-5xl mb-4 animate-pulse">⏳</div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Still Processing…</h1>
-          <p className="text-gray-500">Refresh the page in a few seconds.</p>
+          <p className="text-gray-500">This page will refresh automatically.</p>
         </div>
       </main>
     )
