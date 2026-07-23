@@ -28,6 +28,13 @@ import { checkTierLimits, checkEmailTierLimits, incrementUploadCount, incrementE
 import { generateFingerprint, checkCache, saveToCache } from '@/lib/cacheUtils'
 import { STUDY_PROMPT } from '@/lib/prompts'
 import { validateEmail, normalizeEmail } from '@/lib/emailUtils'
+import { rateLimit, getClientIp } from '@/lib/rateLimit'
+
+// Tier limits (lib/tiers.ts) key off a self-reported phone+email, which costs
+// nothing to fake — this is a backstop keyed on IP so scripted abuse can't
+// just rotate identities to get unlimited free Claude API calls.
+const UPLOAD_RATE_LIMIT = 20
+const UPLOAD_RATE_WINDOW_SECONDS = 60 * 60
 
 // Claude reads these image formats and PDFs directly
 type ClaudeMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
@@ -48,6 +55,16 @@ function extOf(filename: string): string {
 const MAX_EXTRACTED_CHARS = 60_000
 
 export async function POST(request: NextRequest) {
+
+  // ── STEP 0: Rate limit by IP before doing any real work ────────
+  const clientIp = getClientIp(request)
+  const { allowed, retryAfter } = await rateLimit(`upload:${clientIp}`, UPLOAD_RATE_LIMIT, UPLOAD_RATE_WINDOW_SECONDS)
+  if (!allowed) {
+    return NextResponse.json(
+      { message: 'Too many uploads from this connection. Please try again later.' },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    )
+  }
 
   // ── STEP 1: Parse the form data sent from the upload page ─────
   let formData: FormData
