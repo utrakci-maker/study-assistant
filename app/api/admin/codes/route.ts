@@ -10,12 +10,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme'
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? ''
 
 function checkAuth(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization')
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-  return token === ADMIN_PASSWORD
+  return !!ADMIN_PASSWORD && token === ADMIN_PASSWORD
 }
 
 export async function GET(request: NextRequest) {
