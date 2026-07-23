@@ -11,6 +11,25 @@ const withPWA = withPWAInit({
   },
 })
 
+// The app has no third-party embeds, analytics, or CDN scripts — fonts are
+// self-hosted (next/font/local) and the only cross-origin fetch is Supabase
+// Auth. Google OAuth is a full-page redirect, not an iframe/fetch, so it
+// doesn't need a CSP allowance. 'unsafe-inline' on script/style is kept
+// because Next.js App Router injects inline hydration scripts without a
+// nonce here (no middleware is set up to issue one).
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.supabase.co",
+  "frame-ancestors 'self'",
+  "form-action 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+].join('; ')
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async headers() {
@@ -25,6 +44,7 @@ const nextConfig = {
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), browsing-topics=()' },
           { key: 'X-XSS-Protection', value: '1; mode=block' },
           { key: 'X-DNS-Prefetch-Control', value: 'on' },
+          { key: 'Content-Security-Policy', value: CSP },
         ],
       },
     ]
